@@ -116,7 +116,8 @@ STRUCTURE = {
     "drink_to_age": _n("Drinking window end, in years after the vintage"),
     "advice": _t("One sentence on the drinking window and what it is based on (area, producer or the specific wine)"),
     "serving": _t("Short serving advice: temperature, decanting"),
-    "purchase_price": _n("Price per bottle in DKK from the invoice text, or 0 if not present"),
+    "list_price": _n("Estimated typical Danish retail price for ONE bottle of this size, in DKK incl. VAT, excluding "
+                     "shipping and without quantity discounts; 0 if you cannot estimate it"),
     "quantity": _n("Number of bottles bought according to the invoice text, or 0 if not present"),
     "shop": _t("Wine shop / seller if it can be seen from the invoice text, else empty"),
     "info": _t("2-4 sentences of interesting knowledge about the wine, producer or area"),
@@ -138,16 +139,19 @@ def _known(con, field, limit=150):
     return [v for v, _ in vocab.counts(con, field).most_common(limit)]
 
 
-def build_prompt(con, text, barcode, binfo, current, n_photos=0):
+def build_prompt(con, text, barcode, binfo, current, n_photos=0, photo_labels=None):
     lines = [
         "You are helping register a wine in a private wine cellar database.",
         "Identify the wine and fill in the structured fields.",
         "",
     ]
     if n_photos:
+        labels = ", ".join(f"photo {i + 1} = {l}" for i, l in enumerate(photo_labels or [])) or f"{n_photos} photo(s)"
         lines += [
-            f"{n_photos} photo(s) of the bottle are attached. Read the label(s) carefully: producer, wine name, vintage,",
-            "appellation, classification, bottle size and any barcode. What is printed on the label wins over your memory.",
+            f"Photos of the bottle are attached ({labels}). Read the label(s) carefully: producer, wine name, vintage,",
+            "appellation, classification, bottle size, alcohol, grapes and any barcode (back labels often list grapes",
+            "and the barcode).",
+            "What is printed on the label wins over your memory.",
             "If the vintage or another detail cannot be read on the label, say so in uncertain_fields and uncertainty_note.",
             "",
         ]
@@ -175,6 +179,8 @@ def build_prompt(con, text, barcode, binfo, current, n_photos=0):
         f"The current year is {date.today().year}. The drinking window is given in whole years after the vintage.",
         "Critic scores: only give a score if you know it was actually published for this exact wine and vintage,",
         "and give the URL where it is published. Never estimate or invent a score; leave it empty instead.",
+        "The estimated price (list_price) is a typical Danish shop price for one bottle; it is an estimate, so list",
+        "list_price in uncertain_fields unless you are confident. Do not use the invoice price for it.",
         "Leave text fields empty and number fields 0 when you do not know.",
     ]
     return "\n".join(lines)
@@ -200,14 +206,14 @@ def _clean(d):
     return out
 
 
-def lookup(con, text, barcode, current=None, photos=None):
+def lookup(con, text, barcode, current=None, photos=None, photo_labels=None):
     entity = ai_entity()
     if not entity:
         raise RuntimeError("No AI Task entity found in Home Assistant. Add an AI integration (e.g. Google Gemini) "
                            "with an AI Task, or set 'ai_task_entity' in the app configuration.")
     binfo = barcode_info(barcode)
     saved = [save_photo(p) for p in (photos or [])[:3]]
-    prompt = build_prompt(con, text or "", barcode, binfo, current, len(saved))
+    prompt = build_prompt(con, text or "", barcode, binfo, current, len(saved), photo_labels)
     payload = {"entity_id": entity, "task_name": "wine cellar lookup", "instructions": prompt, "structure": STRUCTURE}
     if saved:
         payload["attachments"] = [{"media_content_id": f"{PHOTO_MEDIA_ID}/{name}", "media_content_type": ctype}

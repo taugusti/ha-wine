@@ -1,3 +1,8 @@
+# 1.5.0
+- Two photo buttons: front label (starts the lookup) and back label (updates the lookup with grapes, barcode etc.).
+- Smart fill suggests an estimated price for one bottle (DKK, excl. shipping) in "Estimated price".
+  The actual purchase price is no longer filled in automatically; you enter it yourself.
+
 # 1.4.0
 - Smart fill from a photo: take one or more photos of the bottle and the lookup starts by itself. Invoice text and
   barcode are optional.

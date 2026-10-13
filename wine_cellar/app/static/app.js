@@ -201,7 +201,7 @@ const SIZES = [[37.5, "37.5 cl (half)"], [50, "50 cl"], [75, "75 cl"], [150, "15
 async function openWine(id, preset = {}) {
   const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "red", vintage: "", movements: [], stock: 0, size_cl: 75, ...preset };
   current = w;
-  aiPhotos = [];
+  aiPhotos = { front: null, back: null };
   const d = $("#drawer");
   const isNew = !id;
   const size = w.size_cl ?? 75;
@@ -226,10 +226,10 @@ async function openWine(id, preset = {}) {
         <summary><h3>Smart fill${aiEntity ? "" : " (not available)"}</h3></summary>
         ${aiEntity ? `
         <div class="photorow">
-          <label class="btn primary bigphoto">📷 Take photo of the bottle<input type="file" id="aiPhoto" accept="image/*" capture="environment" multiple hidden></label>
-          <span id="aiThumbs"></span>
+          <div class="pslot" id="slot-front"></div>
+          <div class="pslot" id="slot-back"></div>
         </div>
-        <p class="muted small">Take a photo of the label (add the back label too if you like). The lookup starts by itself and uses ${esc(aiEntity)} in Home Assistant. Invoice text and barcode are optional extras${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
+        <p class="muted small">Take a photo of the front label; the lookup starts by itself. Add the back label (grapes, barcode) and the lookup is updated. It uses ${esc(aiEntity)} in Home Assistant. Invoice text and barcode are optional extras${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
         <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
         <div class="row">
           <input type="text" id="aiBarcode" placeholder="Barcode" value="${esc(w.barcode ?? "")}">
@@ -250,8 +250,8 @@ async function openWine(id, preset = {}) {
           ${grapeChips(w.grapes)}
           <label>Type<select name="wine_type">${TYPES.map((t) => `<option ${t === (w.wine_type || "red") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
           <label>Bottle size<select name="size_cl">${SIZES.map(([v, l]) => `<option value="${v}" ${Number(size) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-          ${field("purchase_price", "Purchase price (DKK)", w, "number")}
-          ${field("list_price", "List price (DKK)", w, "number")}
+          ${field("purchase_price", "Actual purchase price (DKK, 1 bottle)", w, "number")}
+          ${field("list_price", "Estimated price (DKK, 1 bottle)", w, "number")}
           ${field("shop", "Shop", w, "text", "", "dl-shop")}
           ${field("location", "Location in cellar", w)}
           <label>Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
@@ -305,7 +305,7 @@ async function openWine(id, preset = {}) {
         </li>`).join("") || '<li class="muted">No movements yet.</li>'}</ul></div>`}
     </div>`;
   d.classList.add("open"); d.setAttribute("aria-hidden", "false"); $("#scrim").hidden = false;
-  renderChips(); updateRegionList(); scoreLinks(); renderEst();
+  renderChips(); updateRegionList(); scoreLinks(); renderEst(); if (aiEntity) renderThumbs();
   $("#wf").addEventListener("submit", (e) => e.preventDefault());
   if (isNew && preset.barcode) $("#aiText")?.focus();
 }
@@ -335,14 +335,14 @@ async function renderEst() {
 const SUGG_FIELDS = [
   ["description", "Description"], ["barcode", "Barcode"], ["producer", "Producer"], ["vintage", "Vintage"], ["country", "Country"],
   ["region", "Region"], ["grapes", "Grapes"], ["wine_type", "Type"], ["size_cl", "Bottle size (cl)"],
-  ["purchase_price", "Purchase price"], ["quantity", "Bottles bought"], ["shop", "Shop"],
+  ["list_price", "Estimated price (1 bottle)"], ["quantity", "Bottles bought"], ["shop", "Shop"],
   ["drink_from_age", "Drink from (yrs)"], ["drink_to_age", "Drink until (yrs)"], ["advice", "Drinking advice"],
   ["serving", "Serving"], ["info", "About the wine"],
   ["rp_score", "Wine Advocate"], ["rp_url", "Wine Advocate link"], ["ws_score", "Wine Spectator"],
   ["ws_url", "Wine Spectator link"], ["js_score", "James Suckling"], ["js_url", "James Suckling link"],
 ];
 let lastSugg = null;
-let aiPhotos = []; // resized data URLs
+let aiPhotos = { front: null, back: null }; // resized data URLs
 
 async function resizeImage(file, max = 1600) {
   let bmp;
@@ -353,24 +353,34 @@ async function resizeImage(file, max = 1600) {
   c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
   return c.toDataURL("image/jpeg", 0.85);
 }
+const SLOTS = { front: "Front label", back: "Back label" };
 function renderThumbs() {
-  $("#aiThumbs").innerHTML = aiPhotos.map((p, i) => `<span class="thumb"><img src="${p}" alt="Photo ${i + 1}"><button type="button" data-rmphoto="${i}" title="Remove">×</button></span>`).join("");
-}
-async function addPhotos(files) {
-  for (const f of [...files].slice(0, 3 - aiPhotos.length)) {
-    try { aiPhotos.push(await resizeImage(f)); } catch { toast("Could not read the image"); }
+  for (const [k, label] of Object.entries(SLOTS)) {
+    const el = $(`#slot-${k}`); if (!el) continue;
+    const p = aiPhotos[k];
+    el.innerHTML = p
+      ? `<span class="thumb"><img src="${p}" alt="${label}"><button type="button" data-rmphoto="${k}" title="Remove">×</button></span><span class="small">${label}</span>`
+      : `<label class="btn ${k === "front" ? "primary" : ""} bigphoto">📷 ${label}<input type="file" data-slot="${k}" accept="image/*" capture="environment" hidden></label>`;
   }
+}
+const photoList = () => Object.keys(SLOTS).filter((k) => aiPhotos[k]);
+async function addPhoto(slot, file) {
+  try { aiPhotos[slot] = await resizeImage(file); } catch { toast("Could not read the image"); return; }
   renderThumbs();
-  if (aiPhotos.length) aiLookup();
+  if (aiPhotos.front || slot === "back") aiLookup();
 }
 
 async function aiLookup() {
   const btn = $("#aiGo"), st = $("#aiStatus");
   const text = $("#aiText").value.trim(), barcode = $("#aiBarcode").value.trim();
-  if (!text && !barcode && !aiPhotos.length && !current.id) { toast("Take a photo, paste invoice text or enter a barcode"); return; }
-  btn.disabled = true; st.textContent = `Looking up${aiPhotos.length ? " the photo" : ""} … (can take 10–40 seconds)`; $("#aiResult").innerHTML = "";
+  const slots = photoList();
+  if (!text && !barcode && !slots.length && !current.id) { toast("Take a photo, paste invoice text or enter a barcode"); return; }
+  if (aiLookup.busy) { aiLookup.again = true; return; }
+  aiLookup.busy = true;
+  btn.disabled = true; st.textContent = `Looking up${slots.length ? ` the ${slots.length === 2 ? "photos" : "photo"}` : ""} … (can take 10–40 seconds)`; $("#aiResult").innerHTML = "";
   try {
-    const r = await send("api/ai/lookup", "POST", { text, barcode, photos: aiPhotos, wine_id: current.id || null, current: current.id ? null : formData() });
+    const r = await send("api/ai/lookup", "POST", { text, barcode, photos: slots.map((k) => aiPhotos[k]), photo_labels: slots.map((k) => SLOTS[k].toLowerCase()),
+      wine_id: current.id || null, current: current.id ? null : formData() });
     lastSugg = r.suggestion;
     const f = formData(), isNew = !current.id;
     const cur = (k) => (k === "quantity" ? f.initial_qty : f[k]) ?? "";
@@ -397,7 +407,10 @@ async function aiLookup() {
       </tbody></table>
       <div class="row"><button type="button" class="btn primary" id="aiApply">Apply selected</button><span class="muted small">Then review and save.</span></div>`;
   } catch (e) { st.textContent = ""; $("#aiResult").innerHTML = `<p class="err small">${esc(e.message)}</p>`; }
-  finally { btn.disabled = false; }
+  finally {
+    btn.disabled = false; aiLookup.busy = false;
+    if (aiLookup.again) { aiLookup.again = false; aiLookup(); }
+  }
 }
 
 function aiApply() {
@@ -450,7 +463,7 @@ $("#drawer").addEventListener("click", async (e) => {
   if (t.matches("[data-close]")) closeDrawer();
   else if (t.id === "saveW") saveWine();
   else if (t.id === "aiGo") aiLookup();
-  else if (t.dataset.rmphoto != null) { aiPhotos.splice(Number(t.dataset.rmphoto), 1); renderThumbs(); }
+  else if (t.dataset.rmphoto) { aiPhotos[t.dataset.rmphoto] = null; renderThumbs(); }
   else if (t.id === "aiApply") aiApply();
   else if (t.dataset.openwine) openWine(t.dataset.openwine);
   else if (t.dataset.mv) move(t.dataset.mv);
@@ -481,7 +494,7 @@ $("#drawer").addEventListener("change", (e) => {
     updateRegionList();
   }
   if (t.id === "grapeIn" && t.value.trim()) { addGrape(t.value); t.value = ""; }
-  if (t.id === "aiPhoto" && t.files.length) { addPhotos(t.files); t.value = ""; }
+  if (t.dataset.slot && t.files.length) { addPhoto(t.dataset.slot, t.files[0]); t.value = ""; }
 });
 $("#drawer").addEventListener("keydown", (e) => {
   if (e.target.id === "grapeIn" && (e.key === "Enter" || e.key === ",")) {

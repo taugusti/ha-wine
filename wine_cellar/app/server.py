@@ -171,7 +171,7 @@ def changed():
 
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
-    server_version = "WineCellar/1.4"
+    server_version = "WineCellar/1.5"
 
     def log_message(self, fmt, *args):
         if os.environ.get("WINE_DEBUG"):
@@ -238,7 +238,7 @@ class H(BaseHTTPRequestHandler):
                 if d.get("wine_id"):
                     r = c.execute("SELECT * FROM wine WHERE id=?", (int(d["wine_id"]),)).fetchone()
                     cur = dict(r) if r else None
-                res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"), d.get("photos"))
+                res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"), d.get("photos"), d.get("photo_labels"))
                 return self.send(200, res)
             except ValueError as e:
                 return self.send(400, {"error": str(e)})
