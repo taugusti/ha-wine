@@ -48,7 +48,7 @@ async function refresh() {
   wines = await api("api/wines");
   const countries = [...new Map(wines.filter((w) => w.country).map((w) => [fold(w.country), w.country])).values()].sort((a, b) => a.localeCompare(b, "en"));
   const sel = $("#fCountry"), cur = sel.value;
-  sel.innerHTML = '<option value="">Alle lande</option>' + countries.map((c) => `<option value="${esc(fold(c))}">${esc(c[0].toUpperCase() + c.slice(1))}</option>`).join("");
+  sel.innerHTML = '<option value="">All countries</option>' + countries.map((c) => `<option value="${esc(fold(c))}">${esc(c[0].toUpperCase() + c.slice(1))}</option>`).join("");
   sel.value = cur;
   render();
 }

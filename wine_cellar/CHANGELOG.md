@@ -1,3 +1,6 @@
+# 1.1.1
+- Fixed untranslated "All countries" filter label.
+
 # 1.1.0
 - Everything translated to English (code, UI and documentation).
 - Renamed the app to Wine Cellar (slug `wine_cellar`); sensors renamed to `sensor.wine_cellar_*`.
