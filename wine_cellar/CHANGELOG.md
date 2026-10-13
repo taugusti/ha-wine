@@ -2,6 +2,7 @@
 - Cleaner wine view, especially on phones: an overview at the top (peak and drinking window, key facts, scores, notes), a compact stock row with − / + and Out / In, and the form folded away under "Edit details". Movements are folded too.
 - Unsaved changes show a save bar at the bottom (Discard / Save). Closing with unsaved changes asks Save, Discard or Keep editing.
 - Stock changes no longer throw away unsaved edits in the form.
+- AI review pauses when the Google AI quota is used up, instead of failing wine after wine. Start it again later to continue.
 
 # 1.12.0
 - Review: each suggested value has its own ✓ / ✕, so you can take the peak but keep your own drinking window (or the other way round). "Accept all" / "Reject all" per wine still work.

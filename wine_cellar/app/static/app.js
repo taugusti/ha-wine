@@ -939,7 +939,7 @@ async function renderBulk() {
   const head = run ? `<b>Running:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
       (st.errors ? ` · ${st.errors} errors` : "") + (st.current ? `<br><span class="muted">Now: ${esc(st.current)}</span>` : "")
     : st.status === "idle" ? ""
-    : `<b>${st.status === "done" ? "Finished" : st.status === "cancelled" ? "Cancelled" : "Stopped"}:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
+    : `<b>${st.status === "done" ? "Finished" : st.status === "cancelled" ? "Cancelled" : st.status === "paused" ? "Paused" : "Stopped"}:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
       (st.errors ? ` · ${st.errors} errors` : "") + (st.error ? ` · ${esc(st.error)}` : "");
   if (bulkSeen == null) bulkSeen = st.suggested ?? 0;
   const newer = (st.suggested ?? 0) > bulkSeen;

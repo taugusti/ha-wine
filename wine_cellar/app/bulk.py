@@ -119,6 +119,7 @@ def run(only_missing=True, pause=4):
         _set(status="running", total=len(wines), done=0, suggested=0, skipped=0, errors=0, current=None,
              started=started, finished=None, log=[])
         _log(f"Started: {len(wines)} wines in stock" + (" without a peak" if only_missing else ""))
+        quota_fails = 0
         for i, wine in enumerate(wines):
             if _cancel.is_set():
                 break
@@ -147,11 +148,21 @@ def run(only_missing=True, pause=4):
             if err:
                 _set(errors=_state["errors"] + 1)
                 _log(f"Error: {name}: {str(err)[:120]}")
+                quota_fails = quota_fails + 1 if _quota(err) else 0
+                if quota_fails >= 2:
+                    # the free Google AI quota is used up; it resets daily, so stop instead of failing every wine
+                    _set(status="paused", current=None, finished=time.time(), done=i + 1,
+                         error="The Google AI quota is used up. Start the review again later (the free quota resets daily); "
+                               "it continues with the wines that have no suggestion yet.")
+                    _log("Paused: AI quota used up")
+                    return
             elif items:
+                quota_fails = 0
                 with db.lock():
                     proposals.add(con, items)
                 _set(suggested=_state["suggested"] + 1)
             else:
+                quota_fails = 0
                 _set(skipped=_state["skipped"] + 1)
                 _log(f"No peak found: {name}")
             _set(done=i + 1)
