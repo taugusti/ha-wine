@@ -49,7 +49,7 @@ With Google Gemini: Settings → Devices & services → Google Generative AI →
 quota allows with search (`gemini-2.5-flash` works on the free tier) and enable **Enable Google Search tool**.
 The app finds an agent whose entity ID contains "search" automatically, or set `search_agent_entity`.
 
-Smart fill also suggests an **estimated price** for one bottle in DKK, excluding shipping (a typical Danish shop
+Smart fill also suggests the wine's **value** (normal price) for one bottle in DKK, excluding shipping (a typical Danish shop
 price). Enter the **actual purchase price** yourself.
 
 Photos are resized in the browser and stored in Home Assistant's media folder under `wine_cellar`. The first photo
@@ -97,13 +97,13 @@ The window is given in years after vintage, as in Excel. A wine can also have a 
 best), shown as a darker band in the list; wines in their peak period get the status **At peak**.
 
 Smart fill estimates the window for the specific wine: the producer's style and track record, the cuvée's level
-(grand vin, second wine, entry level), the vintage's character, the grapes, the price level and the bottle size.
+(grand vin, second wine, entry level), the vintage's character, the grapes, the wine's value (normal price, never the discounted price you paid) and the bottle size.
 If the web search finds drinking windows published by critics or the producer, those are used instead (the median
 of the windows found), with links. **Window based on** says what the window rests on; when the AI only knows general
 appellation norms it says so and marks the window as uncertain.
 
  Your own window (Drink age from/to) is used. If it is
-missing, the **auto estimate** is used. It is rule-based on region/appellation, wine type, magnum and price
+missing, the **auto estimate** is used. It is rule-based on region/appellation, wine type, magnum and value (normal price, not the purchase price)
 (`app/estimate.py`).
 
 The wine list shows the **peak period** (the drinking window is shown in small text below) and is sorted by the

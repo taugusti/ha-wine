@@ -1,7 +1,7 @@
 """Rule-based estimate of the drinking window (years after vintage).
 
 Rules are matched against region and description. The most specific rule
-(first in the list) wins. The result is then adjusted for bottle size and price.
+(first in the list) wins. The result is then adjusted for bottle size and value (normal price, not the purchase price).
 """
 import re
 import unicodedata
@@ -113,7 +113,8 @@ def estimate(wine):
     if magnum:
         t += 3
         notes.append("magnum +3 years")
-    price = wine.get("list_price") or wine.get("purchase_price")
+    # the wine's value (normal price), never the purchase price: wines are often bought at steep discounts
+    price = wine.get("list_price")
     try:
         price = float(price) if price not in (None, "") else None
     except (TypeError, ValueError):
@@ -121,8 +122,8 @@ def estimate(wine):
     if price and wtype not in TYPE_RULES and not magnum:
         if price >= 600:
             t += 4
-            notes.append("price >= 600 DKK +4 years")
+            notes.append("value >= 600 DKK +4 years")
         elif price >= 300:
             t += 2
-            notes.append("price >= 300 DKK +2 years")
+            notes.append("value >= 300 DKK +2 years")
     return {"from": f, "to": t, "advice": advice, "rationale": "Estimated from " + ", ".join(notes) + "."}

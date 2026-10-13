@@ -301,6 +301,8 @@ def build_prompt(con, text, barcode, binfo, current, n_photos=0, photo_labels=No
         lines.append("Data already registered (may be incomplete or wrong): " + json.dumps(
             {k: current.get(k) for k in ("description", "vintage", "producer", "country", "region", "grapes")
              if current.get(k)}, ensure_ascii=False))
+        if current.get("list_price"):
+            lines.append(f"Normal retail value of the wine (not the discounted price paid): {current['list_price']:.0f} DKK per bottle")
     lines += [
         "",
         "Spelling rules - the owner wants every value written the same way every time:",
@@ -316,7 +318,9 @@ def build_prompt(con, text, barcode, binfo, current, n_photos=0, photo_labels=No
         "Drinking window: base it on THIS wine, not on the appellation average. Use what you know about the producer",
         "(style, reputation, how their wines age), the cuvée's place in the producer's range, the vintage's character",
         "in this region (e.g. a ripe, structured year ages longer; a light or early-drinking year shorter), the grapes,",
-        "the price level and the bottle size (magnums age more slowly). If a critic or the producer has published a",
+        "the wine's normal price level (its value, never what the owner paid) and the bottle size (magnums age more",
+        "slowly). The owner mostly buys at steep, short-lived discounts, so an invoice or purchase price says nothing",
+        "about the wine's quality or ageing potential - ignore it for the window. If a critic or the producer has published a",
         "window for this wine and vintage, use it. Also give the peak period. Explain the specifics in window_basis;",
         "if you only know general norms for the appellation, say so and list drink_from_age/drink_to_age in",
         "uncertain_fields.",

@@ -262,7 +262,7 @@ async function openWine(id, preset = {}, keepScroll = 0) {
           ${field("region", "Region (broad → narrow)", w, "text", "wide", "dl-region")}
           ${grapeChips(w.grapes)}
           ${field("purchase_price", "Paid (DKK/bottle)", w, "number")}
-          ${field("list_price", "Est. price (DKK)", w, "number")}
+          ${field("list_price", "Value (DKK, normal price)", w, "number")}
           ${field("shop", "Shop", w, "text", "", "dl-shop")}
           ${field("location", "Location", w)}
           <label class="wide">Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}" inputmode="numeric"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
@@ -332,7 +332,7 @@ function renderOverview() {
   const sub = [w.producer, w.region, w.country].filter(Boolean).map(esc).join(" · ");
   if ($("#ovSub")) $("#ovSub").innerHTML = sub;
   const fact = (l, v) => (v === "" || v == null ? "" : `<div><dt>${l}</dt><dd>${v}</dd></div>`);
-  const price = [w.purchase_price != null ? `${kr(w.purchase_price)} paid` : "", w.list_price != null && w.list_price !== w.purchase_price ? `${kr(w.list_price)} est.` : ""].filter(Boolean).join(" · ");
+  const price = [w.purchase_price != null ? `${kr(w.purchase_price)} paid` : "", w.list_price != null && w.list_price !== w.purchase_price ? `${kr(w.list_price)} value` : ""].filter(Boolean).join(" · ");
   const scores = CRITICS.filter((c) => w[`${c.k}_score`]).map((c) => {
     const u = w[`${c.k}_url`];
     return /^https?:/.test(u || "") ? `<a class="score" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(c.name)}">${c.k.toUpperCase()} ${esc(w[`${c.k}_score`])}</a>`
@@ -397,7 +397,7 @@ async function renderEst() {
 const SUGG_FIELDS = [
   ["description", "Description"], ["barcode", "Barcode"], ["producer", "Producer"], ["vintage", "Vintage"], ["country", "Country"],
   ["region", "Region"], ["grapes", "Grapes"], ["wine_type", "Type"], ["size_cl", "Bottle size (cl)"],
-  ["list_price", "Estimated price (1 bottle)"], ["quantity", "Bottles bought"], ["shop", "Shop"],
+  ["list_price", "Value (normal price, 1 bottle)"], ["quantity", "Bottles bought"], ["shop", "Shop"],
   ["drink_from_age", "Drink from (yrs)"], ["drink_to_age", "Drink until (yrs)"], ["peak_from_age", "Peak from (yrs)"],
   ["peak_to_age", "Peak until (yrs)"], ["window_basis", "Window based on"], ["advice", "Drinking advice"],
   ["serving", "Serving"], ["info", "About the wine"],

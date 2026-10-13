@@ -1,3 +1,6 @@
+# 1.13.1
+- Drinking windows use the wine's value (normal price) instead of the purchase price, which is often a steep discount. This applies to the rule estimate and to the AI, which is told to ignore the price paid. The "Estimated price" field is now called "Value (DKK, normal price)".
+
 # 1.13.0
 - Cleaner wine view, especially on phones: an overview at the top (peak and drinking window, key facts, scores, notes), a compact stock row with − / + and Out / In, and the form folded away under "Edit details". Movements are folded too.
 - Unsaved changes show a save bar at the bottom (Discard / Save). Closing with unsaved changes asks Save, Discard or Keep editing.
