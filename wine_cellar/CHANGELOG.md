@@ -1,3 +1,10 @@
+# 1.4.0
+- Smart fill from a photo: take one or more photos of the bottle and the lookup starts by itself. Invoice text and
+  barcode are optional.
+- The AI marks the fields it is unsure about (⚠) and explains why; a banner warns when it is not sure it found the
+  right wine.
+- The first photo is kept as the wine's label photo (stored in Home Assistant's media folder, `wine_cellar`).
+
 # 1.3.0
 - New Review tab: suggested changes to existing values (e.g. drinking windows) wait for your approval and can be
   adjusted before you accept them. Empty fields (e.g. critic scores) can be filled in directly, with sources.

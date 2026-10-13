@@ -5,8 +5,10 @@
    (ai_task.generate_data), which returns structured data. No API key is stored in this app;
    it uses whatever AI integration is configured in Home Assistant.
 """
+import base64
 import json
 import os
+import time
 import re
 import urllib.parse
 import urllib.request
@@ -16,7 +18,26 @@ import vocab
 
 HA_URL = os.environ.get("WINE_HA_URL", "http://supervisor/core")
 OPTIONS_FILE = os.environ.get("WINE_OPTIONS", "/data/options.json")
-UA = "WineCellar-HomeAssistant/1.2 (https://github.com/taugusti/ha-wine)"
+UA = "WineCellar-HomeAssistant/1.4 (https://github.com/taugusti/ha-wine)"
+# Photos are stored in Home Assistant's media folder so the AI Task can read them as attachments
+# (media-source://media_source/local/...). They are kept as label photos for the wines.
+PHOTO_DIR = os.environ.get("WINE_PHOTO_DIR", "/media/wine_cellar")
+PHOTO_MEDIA_ID = os.environ.get("WINE_PHOTO_MEDIA_ID", "media-source://media_source/local/wine_cellar")
+
+
+def save_photo(data_url):
+    """Save a data URL (image/jpeg or image/png) and return the file name."""
+    m = re.match(r"data:(image/(jpeg|png|webp));base64,(.+)", data_url or "", re.S)
+    if not m:
+        raise ValueError("Unsupported image")
+    raw = base64.b64decode(m.group(3))
+    if len(raw) > 8_000_000:
+        raise ValueError("Image too large")
+    os.makedirs(PHOTO_DIR, exist_ok=True)
+    name = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}.{'jpg' if m.group(2) == 'jpeg' else m.group(2)}"
+    with open(os.path.join(PHOTO_DIR, name), "wb") as f:
+        f.write(raw)
+    return name, m.group(1)
 
 
 def _token():
@@ -106,6 +127,10 @@ STRUCTURE = {
     "js_score": _t("James Suckling score for this exact vintage; empty if unknown"),
     "js_url": _t("URL for the James Suckling score; empty if unknown"),
     "confidence": _t("high, medium or low: how sure you are that you identified the right wine"),
+    "uncertain_fields": _t("Comma-separated list of the field names above that you are unsure about or had to guess "
+                           "(e.g. 'vintage, grapes'); empty if you are sure of everything"),
+    "uncertainty_note": _t("Short explanation of what you are unsure about and why (e.g. 'vintage not visible on the label'); "
+                           "empty if nothing"),
 }
 
 
@@ -113,11 +138,20 @@ def _known(con, field, limit=150):
     return [v for v, _ in vocab.counts(con, field).most_common(limit)]
 
 
-def build_prompt(con, text, barcode, binfo, current):
+def build_prompt(con, text, barcode, binfo, current, n_photos=0):
     lines = [
         "You are helping register a wine in a private wine cellar database.",
         "Identify the wine and fill in the structured fields.",
         "",
+    ]
+    if n_photos:
+        lines += [
+            f"{n_photos} photo(s) of the bottle are attached. Read the label(s) carefully: producer, wine name, vintage,",
+            "appellation, classification, bottle size and any barcode. What is printed on the label wins over your memory.",
+            "If the vintage or another detail cannot be read on the label, say so in uncertain_fields and uncertainty_note.",
+            "",
+        ]
+    lines += [
         f"Invoice / pasted text:\n{text.strip() or '(none)'}",
         f"Barcode: {barcode or '(none)'}",
     ]
@@ -166,16 +200,19 @@ def _clean(d):
     return out
 
 
-def lookup(con, text, barcode, current=None):
+def lookup(con, text, barcode, current=None, photos=None):
     entity = ai_entity()
     if not entity:
         raise RuntimeError("No AI Task entity found in Home Assistant. Add an AI integration (e.g. Google Gemini) "
                            "with an AI Task, or set 'ai_task_entity' in the app configuration.")
     binfo = barcode_info(barcode)
-    prompt = build_prompt(con, text or "", barcode, binfo, current)
-    resp = _ha("POST", "/api/services/ai_task/generate_data?return_response",
-               {"entity_id": entity, "task_name": "wine cellar lookup", "instructions": prompt, "structure": STRUCTURE},
-               timeout=120)
+    saved = [save_photo(p) for p in (photos or [])[:3]]
+    prompt = build_prompt(con, text or "", barcode, binfo, current, len(saved))
+    payload = {"entity_id": entity, "task_name": "wine cellar lookup", "instructions": prompt, "structure": STRUCTURE}
+    if saved:
+        payload["attachments"] = [{"media_content_id": f"{PHOTO_MEDIA_ID}/{name}", "media_content_type": ctype}
+                                  for name, ctype in saved]
+    resp = _ha("POST", "/api/services/ai_task/generate_data?return_response", payload, timeout=150)
     data = (resp or {}).get("service_response", {}).get("data") if isinstance(resp, dict) else None
     if not isinstance(data, dict):
         raise RuntimeError("The AI Task returned no structured data.")
@@ -186,6 +223,9 @@ def lookup(con, text, barcode, current=None):
         s["description"] = re.sub(r"\s+", " ", s["description"])
     if barcode and not (current or {}).get("barcode"):
         s["barcode"] = re.sub(r"\s", "", barcode)
+    s["uncertain_fields"] = [f.strip() for f in re.split(r"[,;\s]+", s.get("uncertain_fields") or "") if f.strip() in STRUCTURE]
+    if saved and not (current or {}).get("photo"):
+        s["photo"] = saved[0][0]
     return {"suggestion": s, "barcode_info": binfo, "entity": entity,
             "existing": find_existing(con, s, barcode, (current or {}).get("id"))}
 

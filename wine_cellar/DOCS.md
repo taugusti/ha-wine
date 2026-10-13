@@ -22,13 +22,19 @@ Under **Import & export**, choose `vindatabase.xlsm`, press **Preview** and then
 
 ## Smart fill (AI lookup)
 
-When you create a wine, paste the invoice text and/or scan the barcode under **Smart fill** and press **Look up**.
-The app:
+When you create a wine, press **Take photo of the bottle** under **Smart fill** (up to three photos, e.g. front and
+back label). The lookup starts by itself. You can also paste invoice text and/or scan the barcode, alone or together
+with the photos. The app:
 
 1. looks the barcode up in Open Food Facts (free, often unknown for wine),
-2. asks your Home Assistant **AI Task** (e.g. Google Gemini) to identify the wine, using the invoice text,
+2. asks your Home Assistant **AI Task** (e.g. Google Gemini) to identify the wine from the photos, the invoice text,
    the barcode result and your existing countries, regions, grapes, producers and shops,
-3. shows the suggestions field by field. Tick the ones you want and press **Apply selected**, then save.
+3. shows the suggestions field by field. Fields the AI is unsure about are marked ⚠ with an explanation, and a banner
+   warns you when it is not sure it found the right wine. Tick the suggestions you want, press **Apply selected**,
+   then save.
+
+Photos are resized in the browser and stored in Home Assistant's media folder under `wine_cellar`. The first photo
+is kept as the wine's label photo and shown in the wine's details.
 
 It also warns you if the wine seems to exist already. On an existing wine, Smart fill can complete missing data
 (e.g. critic scores) from the current description.

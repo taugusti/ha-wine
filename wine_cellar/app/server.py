@@ -171,7 +171,7 @@ def changed():
 
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
-    server_version = "WineCellar/1.3"
+    server_version = "WineCellar/1.4"
 
     def log_message(self, fmt, *args):
         if os.environ.get("WINE_DEBUG"):
@@ -238,8 +238,10 @@ class H(BaseHTTPRequestHandler):
                 if d.get("wine_id"):
                     r = c.execute("SELECT * FROM wine WHERE id=?", (int(d["wine_id"]),)).fetchone()
                     cur = dict(r) if r else None
-                res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"))
+                res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"), d.get("photos"))
                 return self.send(200, res)
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
             except RuntimeError as e:
                 return self.send(502, {"error": str(e)})
             except urllib.error.URLError as e:
@@ -258,6 +260,14 @@ class H(BaseHTTPRequestHandler):
             with open(f, "rb") as fh:
                 return self.send(200, fh.read(), mimetypes.guess_type(f)[0] or "application/octet-stream")
 
+        mph = re.fullmatch(r"/api/photo/([\w.-]+)", path)
+        if mph and method == "GET":
+            f = os.path.join(ai.PHOTO_DIR, mph[1])
+            if not os.path.isfile(f):
+                return self.send(404, {"error": "not found"})
+            with open(f, "rb") as fh:
+                return self.send(200, fh.read(), mimetypes.guess_type(f)[0] or "image/jpeg",
+                                 {"Cache-Control": "max-age=31536000"})
         m = re.fullmatch(r"/api/wines/(\d+)", path)
         if path == "/api/wines" and method == "GET":
             return self.send(200, all_wines())

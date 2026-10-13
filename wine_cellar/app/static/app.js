@@ -201,11 +201,12 @@ const SIZES = [[37.5, "37.5 cl (half)"], [50, "50 cl"], [75, "75 cl"], [150, "15
 async function openWine(id, preset = {}) {
   const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "red", vintage: "", movements: [], stock: 0, size_cl: 75, ...preset };
   current = w;
+  aiPhotos = [];
   const d = $("#drawer");
   const isNew = !id;
   const size = w.size_cl ?? 75;
   d.innerHTML = `
-    <div class="dhead"><h2>${isNew ? "New wine" : esc(w.description)}</h2><button class="btn" data-close>Close</button></div>
+    <div class="dhead">${w.photo ? `<a href="api/photo/${esc(w.photo)}" target="_blank" rel="noopener"><img class="lbl" src="api/photo/${esc(w.photo)}" alt="Label photo"></a>` : ""}<h2>${isNew ? "New wine" : esc(w.description)}</h2><button class="btn" data-close>Close</button></div>
     <div class="dbody">
       ${isNew ? "" : `<div class="card">
         <h3>Stock</h3>
@@ -224,8 +225,12 @@ async function openWine(id, preset = {}) {
       <details class="card smart" ${isNew ? "open" : ""}>
         <summary><h3>Smart fill${aiEntity ? "" : " (not available)"}</h3></summary>
         ${aiEntity ? `
-        <p class="muted small">Paste the invoice text and/or scan the barcode. The wine is looked up with ${esc(aiEntity)} in Home Assistant${isNew ? "" : "; without pasted text, the current description is used"}. You choose which suggestions to apply.</p>
-        <textarea id="aiText" placeholder="Paste invoice text here, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
+        <div class="photorow">
+          <label class="btn primary bigphoto">📷 Take photo of the bottle<input type="file" id="aiPhoto" accept="image/*" capture="environment" multiple hidden></label>
+          <span id="aiThumbs"></span>
+        </div>
+        <p class="muted small">Take a photo of the label (add the back label too if you like). The lookup starts by itself and uses ${esc(aiEntity)} in Home Assistant. Invoice text and barcode are optional extras${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
+        <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
         <div class="row">
           <input type="text" id="aiBarcode" placeholder="Barcode" value="${esc(w.barcode ?? "")}">
           <button type="button" class="btn primary" id="aiGo">Look up</button>
@@ -252,6 +257,7 @@ async function openWine(id, preset = {}) {
           <label>Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
           ${isNew ? field("initial_qty", "Bottles in stock at creation", w, "number") : "<span></span>"}
           ${field("link", "Link", w, "url", "wide")}
+          <input type="hidden" name="photo" value="${esc(w.photo ?? "")}">
           <label class="wide">About the wine<textarea name="info">${esc(w.info ?? "")}</textarea></label>
           <label class="wide">Notes<textarea name="note">${esc(w.note ?? "")}</textarea></label>
         </div>
@@ -336,28 +342,58 @@ const SUGG_FIELDS = [
   ["ws_url", "Wine Spectator link"], ["js_score", "James Suckling"], ["js_url", "James Suckling link"],
 ];
 let lastSugg = null;
+let aiPhotos = []; // resized data URLs
+
+async function resizeImage(file, max = 1600) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { bmp = await createImageBitmap(file); }
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+function renderThumbs() {
+  $("#aiThumbs").innerHTML = aiPhotos.map((p, i) => `<span class="thumb"><img src="${p}" alt="Photo ${i + 1}"><button type="button" data-rmphoto="${i}" title="Remove">×</button></span>`).join("");
+}
+async function addPhotos(files) {
+  for (const f of [...files].slice(0, 3 - aiPhotos.length)) {
+    try { aiPhotos.push(await resizeImage(f)); } catch { toast("Could not read the image"); }
+  }
+  renderThumbs();
+  if (aiPhotos.length) aiLookup();
+}
 
 async function aiLookup() {
   const btn = $("#aiGo"), st = $("#aiStatus");
   const text = $("#aiText").value.trim(), barcode = $("#aiBarcode").value.trim();
-  if (!text && !barcode && !current.id) { toast("Paste invoice text or enter a barcode"); return; }
-  btn.disabled = true; st.textContent = "Looking up … (can take 10–30 seconds)"; $("#aiResult").innerHTML = "";
+  if (!text && !barcode && !aiPhotos.length && !current.id) { toast("Take a photo, paste invoice text or enter a barcode"); return; }
+  btn.disabled = true; st.textContent = `Looking up${aiPhotos.length ? " the photo" : ""} … (can take 10–40 seconds)`; $("#aiResult").innerHTML = "";
   try {
-    const r = await send("api/ai/lookup", "POST", { text, barcode, wine_id: current.id || null, current: current.id ? null : formData() });
+    const r = await send("api/ai/lookup", "POST", { text, barcode, photos: aiPhotos, wine_id: current.id || null, current: current.id ? null : formData() });
     lastSugg = r.suggestion;
     const f = formData(), isNew = !current.id;
     const cur = (k) => (k === "quantity" ? f.initial_qty : f[k]) ?? "";
     const rows = SUGG_FIELDS.filter(([k]) => r.suggestion[k] != null && r.suggestion[k] !== "" && (k !== "quantity" || isNew))
       .filter(([k]) => String(r.suggestion[k]) !== String(cur(k)));
-    st.textContent = `Confidence: ${r.suggestion.confidence || "unknown"}${r.barcode_info ? ` · barcode found in ${r.barcode_info.source}` : ""}`;
+    const unsure = new Set(r.suggestion.uncertain_fields || []);
+    if (unsure.has("quantity")) unsure.add("quantity");
+    const conf = (r.suggestion.confidence || "unknown").toLowerCase();
+    st.textContent = `Confidence: ${conf}${r.barcode_info ? ` · barcode found in ${r.barcode_info.source}` : ""}`;
+    const doubt = conf !== "high" || unsure.size || r.suggestion.uncertainty_note ? `<div class="doubt ${conf === "low" ? "low" : ""}">
+      <b>⚠ ${conf === "low" ? "The AI is not sure it identified the right wine." : unsure.size ? "The AI is unsure about some details." : "Please check the suggestions."}</b>
+      ${r.suggestion.uncertainty_note ? `<div>${esc(r.suggestion.uncertainty_note)}</div>` : ""}
+      ${unsure.size ? `<div class="small">Marked with ⚠ below: ${[...unsure].map((k) => (SUGG_FIELDS.find(([f]) => f === k) || [k, k])[1]).join(", ")}.</div>` : ""}</div>` : "";
+    if (r.suggestion.photo) { const ph = $('#drawer [name="photo"]'); if (ph && !ph.value) ph.value = r.suggestion.photo; }
     const ex = (r.existing || []).length ? `<div class="exist"><b>This wine may already be in your cellar:</b>
       ${r.existing.map((x) => `<div>${esc(x.description)} <span class="muted">(${x.stock} in stock, ${esc(x.reason)})</span>
         <button type="button" class="btn" data-openwine="${x.id}">Open it</button></div>`).join("")}
       <span class="muted small">To add bottles to an existing wine, open it and use "In".</span></div>` : "";
-    if (!rows.length) { $("#aiResult").innerHTML = ex + '<p class="muted small">No new information found.</p>'; return; }
-    $("#aiResult").innerHTML = ex + `<table class="sugg"><thead><tr><th></th><th>Field</th><th>Now</th><th>Suggestion</th></tr></thead><tbody>
+    if (!rows.length) { $("#aiResult").innerHTML = doubt + ex + '<p class="muted small">No new information found.</p>'; return; }
+    $("#aiResult").innerHTML = doubt + ex + `<table class="sugg"><thead><tr><th></th><th>Field</th><th>Now</th><th>Suggestion</th></tr></thead><tbody>
       ${rows.map(([k, l]) => { const c = cur(k); const pre = isNew || c === "" || (k.endsWith("_score") || k.endsWith("_url")) && !c;
-        return `<tr><td><input type="checkbox" data-sk="${k}" ${pre ? "checked" : ""}></td><td>${l}</td><td class="muted">${esc(c)}</td><td>${esc(r.suggestion[k])}</td></tr>`; }).join("")}
+        const u = unsure.has(k);
+        return `<tr class="${u ? "unsure" : ""}"><td><input type="checkbox" data-sk="${k}" ${pre ? "checked" : ""}></td><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${esc(c)}</td><td>${esc(r.suggestion[k])}</td></tr>`; }).join("")}
       </tbody></table>
       <div class="row"><button type="button" class="btn primary" id="aiApply">Apply selected</button><span class="muted small">Then review and save.</span></div>`;
   } catch (e) { st.textContent = ""; $("#aiResult").innerHTML = `<p class="err small">${esc(e.message)}</p>`; }
@@ -414,6 +450,7 @@ $("#drawer").addEventListener("click", async (e) => {
   if (t.matches("[data-close]")) closeDrawer();
   else if (t.id === "saveW") saveWine();
   else if (t.id === "aiGo") aiLookup();
+  else if (t.dataset.rmphoto != null) { aiPhotos.splice(Number(t.dataset.rmphoto), 1); renderThumbs(); }
   else if (t.id === "aiApply") aiApply();
   else if (t.dataset.openwine) openWine(t.dataset.openwine);
   else if (t.dataset.mv) move(t.dataset.mv);
@@ -444,6 +481,7 @@ $("#drawer").addEventListener("change", (e) => {
     updateRegionList();
   }
   if (t.id === "grapeIn" && t.value.trim()) { addGrape(t.value); t.value = ""; }
+  if (t.id === "aiPhoto" && t.files.length) { addPhotos(t.files); t.value = ""; }
 });
 $("#drawer").addEventListener("keydown", (e) => {
   if (e.target.id === "grapeIn" && (e.key === "Enter" || e.key === ",")) {
