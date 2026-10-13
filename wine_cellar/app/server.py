@@ -179,6 +179,45 @@ def changed():
     _ha_dirty.set()
 
 
+# ---------------------------------------------------------------- background AI lookups
+_jobs, _jobs_lock = {}, threading.Lock()
+
+
+def start_lookup(d):
+    jid = os.urandom(6).hex()
+    with _jobs_lock:
+        for k in [k for k, j in _jobs.items() if time.time() - j["started"] > 3600]:
+            del _jobs[k]
+        _jobs[jid] = {"status": "running", "stage": "starting", "result": None, "error": None, "started": time.time()}
+
+    def stage(s):
+        with _jobs_lock:
+            _jobs[jid]["stage"] = s
+
+    def run():
+        c = db.connect()
+        try:
+            cur = None
+            if d.get("wine_id"):
+                r = c.execute("SELECT * FROM wine WHERE id=?", (int(d["wine_id"]),)).fetchone()
+                cur = dict(r) if r else None
+            res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"), d.get("photos"),
+                            d.get("photo_labels"), progress=stage, use_saved_photo=bool(d.get("use_saved_photo")))
+            upd = {"status": "done", "result": res}
+        except urllib.error.URLError as e:
+            upd = {"status": "error", "error": f"Could not reach Home Assistant: {e}"}
+        except Exception as e:  # noqa: BLE001
+            upd = {"status": "error", "error": str(e)[:500] or type(e).__name__}
+        finally:
+            c.close()
+        with _jobs_lock:
+            if _jobs[jid]["status"] == "running":  # ignore the result if the user cancelled
+                _jobs[jid].update(upd)
+
+    threading.Thread(target=run, daemon=True).start()
+    return jid
+
+
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
     server_version = "WineCellar/1.6"
@@ -241,23 +280,19 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/ai/status":
             return self.send(200, {"entity": ai.ai_entity()})
         if path == "/api/ai/lookup" and method == "POST":
-            d = self.json_body()
-            c = db.connect()
-            try:
-                cur = None
-                if d.get("wine_id"):
-                    r = c.execute("SELECT * FROM wine WHERE id=?", (int(d["wine_id"]),)).fetchone()
-                    cur = dict(r) if r else None
-                res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"), d.get("photos"), d.get("photo_labels"))
-                return self.send(200, res)
-            except ValueError as e:
-                return self.send(400, {"error": str(e)})
-            except RuntimeError as e:
-                return self.send(502, {"error": str(e)})
-            except urllib.error.URLError as e:
-                return self.send(502, {"error": f"Could not reach Home Assistant: {e}"})
-            finally:
-                c.close()
+            # runs in the background: a lookup can take longer than the ingress/Nabu Casa proxy waits
+            return self.send(202, {"job": start_lookup(self.json_body())})
+        mj = re.fullmatch(r"/api/ai/job/(\w+)(/cancel)?", path)
+        if mj:
+            with _jobs_lock:
+                j = _jobs.get(mj[1])
+                if not j:
+                    return self.send(404, {"error": "Lookup not found (the app may have restarted)."})
+                if mj[2] and method == "POST" and j["status"] == "running":
+                    j["status"] = "cancelled"
+                out = {k: j[k] for k in ("status", "stage", "result", "error")}
+                out["elapsed"] = int(time.time() - j["started"])
+            return self.send(200, out)
         return self.send(404, {"error": "not found"})
 
     def dispatch(self, method, path, q):

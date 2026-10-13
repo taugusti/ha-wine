@@ -298,13 +298,21 @@ def _clean(d):
     return out
 
 
-def lookup(con, text, barcode, current=None, photos=None, photo_labels=None):
+def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, progress=None, use_saved_photo=False):
+    progress = progress or (lambda stage: None)
     entity = ai_entity()
     if not entity:
         raise RuntimeError("No AI Task entity found in Home Assistant. Add an AI integration (e.g. Google Gemini) "
                            "with an AI Task, or set 'ai_task_entity' in the app configuration.")
     binfo = barcode_info(barcode)
     saved = [save_photo(p) for p in (photos or [])[:3]]
+    photo_labels = list(photo_labels or [])
+    if not saved and use_saved_photo and (current or {}).get("photo"):
+        f = current["photo"]
+        if os.path.isfile(os.path.join(PHOTO_DIR, f)):
+            saved = [(f, "image/png" if f.endswith(".png") else "image/jpeg")]
+            photo_labels = ["front label (saved earlier)"]
+    progress("reading the label" if saved else "identifying the wine")
     prompt = build_prompt(con, text or "", barcode, binfo, current, len(saved), photo_labels)
     payload = {"entity_id": entity, "task_name": "wine cellar lookup", "instructions": prompt, "structure": STRUCTURE}
     if saved:
@@ -326,6 +334,7 @@ def lookup(con, text, barcode, current=None, photos=None, photo_labels=None):
         s["photo"] = saved[0][0]
     search = {"agent": search_entity()}
     if search["agent"] and (s.get("description") or s.get("producer")):
+        progress("searching the web for prices and scores")
         try:
             search.update(merge_search(s, web_search(search["agent"], s)))
         except Exception as e:  # noqa: BLE001 - the lookup still works without web search

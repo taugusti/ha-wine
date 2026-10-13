@@ -32,9 +32,10 @@ with the photos. The app:
 1. looks the barcode up in Open Food Facts (free, often unknown for wine),
 2. asks your Home Assistant **AI Task** (e.g. Google Gemini) to identify the wine from the photos, the invoice text,
    the barcode result and your existing countries, regions, grapes, producers and shops,
-3. shows the suggestions field by field. Fields the AI is unsure about are marked ⚠ with an explanation, and a banner
-   warns you when it is not sure it found the right wine. Tick the suggestions you want, press **Apply selected**,
-   then save.
+3. shows the suggestions field by field (the lookup runs in the background; you see which step it is on, and
+   you can **Cancel** it and fill in the fields yourself, or **Retry** if it fails). Fields the AI is unsure about are marked ⚠ with an explanation, and a banner
+   warns you when it is not sure it found the right wine. Accept (✓) or reject (✕) each suggestion, or press
+   **Accept all**, then save.
 
 ### Web search (prices and critic scores)
 
@@ -54,8 +55,8 @@ price). Enter the **actual purchase price** yourself.
 Photos are resized in the browser and stored in Home Assistant's media folder under `wine_cellar`. The first photo
 is kept as the wine's label photo and shown in the wine's details.
 
-It also warns you if the wine seems to exist already. On an existing wine, Smart fill can complete missing data
-(e.g. critic scores) from the current description.
+It also warns you if the wine seems to exist already. On an existing wine, press **✨ Update with AI** to look it up again (with
+the saved label photo and the current description); accepted suggestions are saved right away.
 
 The AI Task entity is detected automatically. To choose a specific one, set `ai_task_entity` in the app
 configuration. No API key is stored in the app.

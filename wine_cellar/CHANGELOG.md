@@ -1,3 +1,10 @@
+# 1.8.0
+- Lookups run in the background with live progress (step and seconds), so slow lookups no longer end in "Bad Gateway".
+- Cancel a running lookup and fill in the fields yourself; failed lookups show a Retry button.
+- "✨ Update with AI" on existing wines: looks the wine up again (using the saved label photo).
+- Suggestions are accepted (✓) or rejected (✕) one by one, or all at once; on existing wines accepted values are saved right away.
+- Suggestion table fits on phones.
+
 # 1.7.0
 - Front/back label buttons open a camera view inside the app (the Home Assistant Android app opened the gallery instead of the camera). "Or choose from gallery" is still available, and the gallery is used automatically if the camera cannot be opened.
 

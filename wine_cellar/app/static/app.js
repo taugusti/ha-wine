@@ -201,6 +201,7 @@ const SIZES = [[37.5, "37.5 cl (half)"], [50, "50 cl"], [75, "75 cl"], [150, "15
 async function openWine(id, preset = {}) {
   if (!aiEntity) { try { aiEntity = (await api("api/ai/status")).entity; } catch { /* AI not available */ } }
   const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "red", vintage: "", movements: [], stock: 0, size_cl: 75, ...preset };
+  if (aiJob) aiCancel();
   current = w;
   aiPhotos = { front: null, back: null };
   const d = $("#drawer");
@@ -223,6 +224,7 @@ async function openWine(id, preset = {}) {
         </div>
       </div>`}
 
+      ${!isNew && aiEntity ? `<button type="button" class="btn update-ai" id="aiUpdate">✨ Update with AI</button>` : ""}
       <details class="card smart" ${isNew ? "open" : ""}>
         <summary><h3>Smart fill${aiEntity ? "" : " (not available)"}</h3></summary>
         ${aiEntity ? `
@@ -402,72 +404,142 @@ async function addPhoto(slot, file) {
   if (aiPhotos.front || slot === "back") aiLookup();
 }
 
+let aiJob = null;      // the running background lookup {id}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function aiLookup() {
   const btn = $("#aiGo"), st = $("#aiStatus");
+  if (!btn) return;
   const text = $("#aiText").value.trim(), barcode = $("#aiBarcode").value.trim();
   const slots = photoList();
   if (!text && !barcode && !slots.length && !current.id) { toast("Take a photo, paste invoice text or enter a barcode"); return; }
-  if (aiLookup.busy) { aiLookup.again = true; return; }
-  aiLookup.busy = true;
-  btn.disabled = true; st.textContent = `Looking up${slots.length ? ` the ${slots.length === 2 ? "photos" : "photo"}` : ""} … (can take up to a minute with web search)`; $("#aiResult").innerHTML = "";
+  if (aiJob) { aiLookup.again = true; return; }   // a newer photo arrived while running: run again afterwards
+  const job = { id: null };
+  aiJob = job;
+  btn.disabled = true; $("#aiResult").innerHTML = "";
+  const wineId = current.id;
+  const showStatus = (txt) => {
+    if (aiJob !== job || current?.id !== wineId) return;
+    st.innerHTML = `<span class="spin"></span> ${esc(txt)} <button type="button" class="btn small-btn" id="aiCancel">Cancel</button>`;
+  };
+  showStatus("Starting …");
   try {
-    const r = await send("api/ai/lookup", "POST", { text, barcode, photos: slots.map((k) => aiPhotos[k]), photo_labels: slots.map((k) => SLOTS[k].toLowerCase()),
-      wine_id: current.id || null, current: current.id ? null : formData() });
-    lastSugg = r.suggestion;
-    const f = formData(), isNew = !current.id;
-    const cur = (k) => (k === "quantity" ? f.initial_qty : f[k]) ?? "";
-    const rows = SUGG_FIELDS.filter(([k]) => r.suggestion[k] != null && r.suggestion[k] !== "" && (k !== "quantity" || isNew))
-      .filter(([k]) => String(r.suggestion[k]) !== String(cur(k)));
-    const unsure = new Set(r.suggestion.uncertain_fields || []);
-    if (unsure.has("quantity")) unsure.add("quantity");
-    const conf = (r.suggestion.confidence || "unknown").toLowerCase();
-    st.textContent = `Confidence: ${conf}${r.barcode_info ? ` · barcode found in ${r.barcode_info.source}` : ""}`;
-    const doubt = conf !== "high" || unsure.size || r.suggestion.uncertainty_note ? `<div class="doubt ${conf === "low" ? "low" : ""}">
-      <b>⚠ ${conf === "low" ? "The AI is not sure it identified the right wine." : unsure.size ? "The AI is unsure about some details." : "Please check the suggestions."}</b>
-      ${r.suggestion.uncertainty_note ? `<div>${esc(r.suggestion.uncertainty_note)}</div>` : ""}
-      ${unsure.size ? `<div class="small">Marked with ⚠ below: ${[...unsure].map((k) => (SUGG_FIELDS.find(([f]) => f === k) || [k, k])[1]).join(", ")}.</div>` : ""}</div>` : "";
-    const sr = r.search || {};
-    const web = sr.agent ? `<div class="websearch small">
-      ${sr.error ? `<b>Web search failed</b> (${esc(sr.agent)}): ${esc(sr.error)}. The suggestions below are based on the AI's own knowledge.`
-        : `<b>Web search</b> (${esc(sr.agent)})${sr.price_note ? ` · price: ${esc(sr.price_note)}` : ""}${sr.critic_window ? ` · critic drinking window: ${esc(sr.critic_window)}` : ""}
-           ${(sr.sources || []).length ? `<div>${sr.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join(" · ")}</div>` : "<div class=\"muted\">No price or critic scores found online.</div>"}`}
-      </div>` : "";
-    if (r.suggestion.photo) { const ph = $('#drawer [name="photo"]'); if (ph && !ph.value) ph.value = r.suggestion.photo; }
-    const ex = (r.existing || []).length ? `<div class="exist"><b>This wine may already be in your cellar:</b>
-      ${r.existing.map((x) => `<div>${esc(x.description)} <span class="muted">(${x.stock} in stock, ${esc(x.reason)})</span>
-        <button type="button" class="btn" data-openwine="${x.id}">Open it</button></div>`).join("")}
-      <span class="muted small">To add bottles to an existing wine, open it and use "In".</span></div>` : "";
-    if (!rows.length) { $("#aiResult").innerHTML = doubt + web + ex + '<p class="muted small">No new information found.</p>'; return; }
-    $("#aiResult").innerHTML = doubt + web + ex + `<table class="sugg"><thead><tr><th></th><th>Field</th><th>Now</th><th>Suggestion</th></tr></thead><tbody>
-      ${rows.map(([k, l]) => { const c = cur(k); const pre = isNew || c === "" || (k.endsWith("_score") || k.endsWith("_url")) && !c;
-        const u = unsure.has(k);
-        return `<tr class="${u ? "unsure" : ""}"><td><input type="checkbox" data-sk="${k}" ${pre ? "checked" : ""}></td><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${esc(c)}</td><td>${esc(r.suggestion[k])}</td></tr>`; }).join("")}
-      </tbody></table>
-      <div class="row"><button type="button" class="btn primary" id="aiApply">Apply selected</button><span class="muted small">Then review and save.</span></div>`;
-  } catch (e) { st.textContent = ""; $("#aiResult").innerHTML = `<p class="err small">${esc(e.message)}</p>`; }
-  finally {
-    btn.disabled = false; aiLookup.busy = false;
-    if (aiLookup.again) { aiLookup.again = false; aiLookup(); }
+    const start = await send("api/ai/lookup", "POST", {
+      text, barcode, photos: slots.map((k) => aiPhotos[k]), photo_labels: slots.map((k) => SLOTS[k].toLowerCase()),
+      wine_id: wineId || null, current: wineId ? null : formData(), use_saved_photo: !!wineId && !slots.length,
+    });
+    job.id = start.job;
+    for (;;) {
+      await sleep(2000);
+      if (aiJob !== job) return;                          // cancelled or replaced
+      const j = await api(`api/ai/job/${job.id}`);
+      if (aiJob !== job) return;
+      if (j.status === "running") {
+        if (j.elapsed > 180) { await api(`api/ai/job/${job.id}/cancel`, { method: "POST" }).catch(() => {}); throw new Error("The lookup took too long."); }
+        showStatus(`Step: ${j.stage} … ${j.elapsed} s`);
+        continue;
+      }
+      if (j.status === "done") { renderSuggestions(j.result); break; }
+      if (j.status === "error") throw new Error(j.error);
+      return; // cancelled elsewhere
+    }
+  } catch (e) {
+    if (aiJob === job) aiFailed(e.message);
+  } finally {
+    if (aiJob === job) {
+      aiJob = null; btn.disabled = false;
+      if (aiLookup.again) { aiLookup.again = false; aiLookup(); }
+    }
   }
 }
 
-function aiApply() {
-  $$("#aiResult [data-sk]:checked").forEach((cb) => {
-    const k = cb.dataset.sk, v = lastSugg[k];
-    if (k === "country") setCountry(v);
-    else if (k === "grapes") { $('#drawer [name="grapes"]').value = ""; String(v).split(",").forEach(addGrape); }
-    else if (k === "quantity") { const el = $('#drawer [name="initial_qty"]'); if (el) el.value = v; }
-    else if (k === "size_cl") {
-      const sel = $('#drawer [name="size_cl"]');
-      if (![...sel.options].some((o) => Number(o.value) === Number(v))) sel.add(new Option(`${v} cl`, v));
-      sel.value = [...sel.options].find((o) => Number(o.value) === Number(v)).value;
-    } else { const el = $(`#drawer [name="${k}"]`); if (el) el.value = v; }
+function aiFailed(msg) {
+  $("#aiStatus").textContent = "";
+  $("#aiResult").innerHTML = `<div class="doubt low"><b>The lookup failed</b><div>${esc(msg)}</div>
+    <div class="row"><button type="button" class="btn primary" id="aiRetry">Retry</button><span class="small">or fill in the fields yourself.</span></div></div>`;
+}
+
+function aiCancel() {
+  if (!aiJob) return;
+  if (aiJob.id) api(`api/ai/job/${aiJob.id}/cancel`, { method: "POST" }).catch(() => {});
+  aiJob = null; aiLookup.again = false;
+  const g = $("#aiGo"), st = $("#aiStatus"), res = $("#aiResult");
+  if (g) g.disabled = false;
+  if (st) st.textContent = "";
+  if (res) res.innerHTML = `<p class="small muted">Lookup cancelled. Fill in the fields yourself, or <button type="button" class="btn small-btn" id="aiRetry">Retry</button></p>`;
+}
+
+function renderSuggestions(r) {
+  const st = $("#aiStatus");
+  lastSugg = r.suggestion;
+  const f = formData(), isNew = !current.id;
+  const cur = (k) => (k === "quantity" ? f.initial_qty : f[k]) ?? "";
+  const rows = SUGG_FIELDS.filter(([k]) => r.suggestion[k] != null && r.suggestion[k] !== "" && (k !== "quantity" || isNew))
+    .filter(([k]) => String(r.suggestion[k]) !== String(cur(k)));
+  const unsure = new Set(r.suggestion.uncertain_fields || []);
+  const conf = (r.suggestion.confidence || "unknown").toLowerCase();
+  st.textContent = `Confidence: ${conf}${r.barcode_info ? ` · barcode found in ${r.barcode_info.source}` : ""}`;
+  const doubt = conf !== "high" || unsure.size || r.suggestion.uncertainty_note ? `<div class="doubt ${conf === "low" ? "low" : ""}">
+    <b>⚠ ${conf === "low" ? "The AI is not sure it identified the right wine." : unsure.size ? "The AI is unsure about some details." : "Please check the suggestions."}</b>
+    ${r.suggestion.uncertainty_note ? `<div>${esc(r.suggestion.uncertainty_note)}</div>` : ""}
+    ${unsure.size ? `<div class="small">Marked with ⚠ below: ${[...unsure].map((k) => (SUGG_FIELDS.find(([fk]) => fk === k) || [k, k])[1]).join(", ")}.</div>` : ""}</div>` : "";
+  const sr = r.search || {};
+  const web = sr.agent ? `<div class="websearch small">
+    ${sr.error ? `<b>Web search failed</b> (${esc(sr.agent)}): ${esc(sr.error)}. The suggestions below are based on the AI's own knowledge.`
+      : `<b>Web search</b> (${esc(sr.agent)})${sr.price_note ? ` · price: ${esc(sr.price_note)}` : ""}${sr.critic_window ? ` · critic drinking window: ${esc(sr.critic_window)}` : ""}
+         ${(sr.sources || []).length ? `<div>${sr.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join(" · ")}</div>` : "<div class=\"muted\">No price or critic scores found online.</div>"}`}
+    </div>` : "";
+  if (r.suggestion.photo) { const ph = $('#drawer [name="photo"]'); if (ph && !ph.value) ph.value = r.suggestion.photo; }
+  const ex = (r.existing || []).length ? `<div class="exist"><b>This wine may already be in your cellar:</b>
+    ${r.existing.map((x) => `<div>${esc(x.description)} <span class="muted">(${x.stock} in stock, ${esc(x.reason)})</span>
+      <button type="button" class="btn" data-openwine="${x.id}">Open it</button></div>`).join("")}
+    <span class="muted small">To add bottles to an existing wine, open it and use "In".</span></div>` : "";
+  if (!rows.length) { $("#aiResult").innerHTML = doubt + web + ex + '<p class="muted small">No new information found.</p>'; return; }
+  $("#aiResult").innerHTML = doubt + web + ex + `
+    <div class="row"><button type="button" class="btn primary" id="aiAcceptAll">Accept all</button>
+      <span class="muted small">${isNew ? "Accepted values are filled into the form; save when you are done." : "Accepted values are saved right away."}</span></div>
+    <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggestion</th><th></th></tr></thead><tbody>
+    ${rows.map(([k, l]) => {
+      const u = unsure.has(k);
+      return `<tr class="${u ? "unsure" : ""}" data-row="${k}"><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${esc(cur(k))}</td><td>${esc(r.suggestion[k])}</td>
+        <td class="acts2"><button type="button" class="okb" data-acc1="${k}" title="Accept">✓</button><button type="button" class="nob" data-rej1="${k}" title="Reject">✕</button></td></tr>`;
+    }).join("")}
+    </tbody></table>`;
+}
+
+function applyField(k, v) {
+  if (k === "country") setCountry(v);
+  else if (k === "grapes") { $('#drawer [name="grapes"]').value = ""; String(v).split(",").forEach(addGrape); }
+  else if (k === "quantity") { const el = $('#drawer [name="initial_qty"]'); if (el) el.value = v; }
+  else if (k === "size_cl") {
+    const sel = $('#drawer [name="size_cl"]');
+    if (![...sel.options].some((o) => Number(o.value) === Number(v))) sel.add(new Option(`${v} cl`, v));
+    sel.value = [...sel.options].find((o) => Number(o.value) === Number(v)).value;
+  } else { const el = $(`#drawer [name="${k}"]`); if (el) el.value = v; }
+}
+
+async function decideRows(keys, accept) {
+  keys = keys.filter((k) => { const tr = $(`#aiResult tr[data-row="${k}"]`); return tr && !tr.classList.contains("done"); });
+  if (!keys.length) return;
+  if (accept) {
+    keys.forEach((k) => applyField(k, lastSugg[k]));
+    if (current.id) {   // existing wine: save the accepted fields right away
+      const f = formData(), body = {};
+      keys.filter((k) => k !== "quantity").forEach((k) => { body[k] = f[k]; });
+      try { await send(`api/wines/${current.id}`, "PUT", body); Object.assign(current, body); toast(keys.length > 1 ? "Saved" : "Saved"); refresh(); }
+      catch (e) { toast("Error: " + e.message); return; }
+    }
+    renderEst(); scoreLinks();
+  }
+  keys.forEach((k) => {
+    const tr = $(`#aiResult tr[data-row="${k}"]`);
+    tr.classList.add("done", accept ? "acc" : "rej");
+    tr.lastElementChild.innerHTML = accept ? '<span class="ok">✓ accepted</span>' : '<span class="muted">rejected</span>';
   });
-  $("#aiResult").innerHTML = '<p class="ok small">Applied. Review the fields and save.</p>';
-  renderEst(); scoreLinks();
 }
 
 function closeDrawer() {
+  if (aiJob) aiCancel();
   const d = $("#drawer"); d.classList.remove("open"); d.setAttribute("aria-hidden", "true"); $("#scrim").hidden = true; current = null;
 }
 
@@ -503,7 +575,12 @@ $("#drawer").addEventListener("click", async (e) => {
   else if (t.id === "aiGo") aiLookup();
   else if (t.dataset.shoot) openPhotoCamera(t.dataset.shoot);
   else if (t.dataset.rmphoto) { aiPhotos[t.dataset.rmphoto] = null; renderThumbs(); }
-  else if (t.id === "aiApply") aiApply();
+  else if (t.id === "aiCancel") aiCancel();
+  else if (t.id === "aiRetry") aiLookup();
+  else if (t.id === "aiAcceptAll") decideRows([...$$("#aiResult tr[data-row]")].map((tr) => tr.dataset.row), true);
+  else if (t.dataset.acc1) decideRows([t.dataset.acc1], true);
+  else if (t.dataset.rej1) decideRows([t.dataset.rej1], false);
+  else if (t.id === "aiUpdate") { const sm = $("#drawer .smart"); if (sm) { sm.open = true; sm.scrollIntoView({ behavior: "smooth" }); } aiLookup(); }
   else if (t.dataset.openwine) openWine(t.dataset.openwine);
   else if (t.dataset.mv) move(t.dataset.mv);
   else if (t.dataset.rmgrape != null) {

@@ -236,3 +236,36 @@ img.lbl { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; bord
 .pcam-spacer { width: 80px; }
 .shutter { width: 72px; height: 72px; border-radius: 50%; border: 4px solid #fff; background: #fff; box-shadow: inset 0 0 0 4px #000; cursor: pointer; }
 .shutter:active { transform: scale(.94); }
+
+/* 1.8: background lookups, per-row decisions */
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -1px; margin-right: 4px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.small-btn { min-height: 28px; padding: 2px 10px; font-size: 13px; margin-left: 6px; }
+#aiStatus { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+td.acts2 { white-space: nowrap; text-align: right; }
+.okb, .nob { width: 34px; height: 30px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 15px; margin-left: 4px; }
+.okb { color: var(--ready); } .nob { color: var(--over); }
+tr.rej td { opacity: .45; } tr.acc td { background: color-mix(in srgb, var(--ready) 10%, transparent); }
+.update-ai { align-self: flex-start; }
+table.sugg { table-layout: fixed; }
+table.sugg td, table.sugg th { overflow-wrap: anywhere; }
+table.sugg th:nth-child(1) { width: 30%; } table.sugg th:nth-child(2) { width: 22%; }
+table.sugg th:nth-child(4) { width: 84px; }
+@media (max-width: 560px) {
+  table.sugg, table.sugg tbody { display: block; }
+  table.sugg thead { display: none; }
+  table.sugg tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  table.sugg td { padding: 0; border: 0; }
+  table.sugg td:nth-child(1) { grid-column: 1; font-weight: 600; font-size: 13px; }
+  table.sugg td:nth-child(2) { grid-column: 1; font-size: 13px; }
+  table.sugg td:nth-child(2):not(:empty)::before { content: "Now: "; }
+  table.sugg td:nth-child(3) { grid-column: 1; }
+  table.sugg td.acts2 { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+}
+@media (max-width: 560px) {
+  table.sugg tr.unsure, table.sugg tr.acc { border-radius: 6px; padding-left: 6px; padding-right: 6px; }
+  table.sugg tr.unsure { background: color-mix(in srgb, var(--now) 12%, transparent); }
+  table.sugg tr.acc { background: color-mix(in srgb, var(--ready) 10%, transparent); }
+  table.sugg tr td { background: none !important; }
+}
