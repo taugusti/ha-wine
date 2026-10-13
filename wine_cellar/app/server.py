@@ -451,6 +451,12 @@ class H(BaseHTTPRequestHandler):
                 raise
             changed()
             return self.send(200, res)
+        mf = re.fullmatch(r"/api/proposals/(\d+)/field", path)
+        if mf and method == "POST":
+            d = self.json_body()
+            res = proposals.decide_field(c, int(mf[1]), d.get("field"), bool(d.get("accept")), d.get("value"))
+            changed()
+            return self.send(200, res)
         mp = re.fullmatch(r"/api/proposals/(\d+)/(accept|reject)", path)
         if mp and method == "POST":
             proposals.decide(c, int(mp[1]), mp[2] == "accept", (self.json_body() or {}).get("changes"))

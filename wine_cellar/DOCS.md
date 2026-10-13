@@ -81,8 +81,8 @@ The critics' own sites require a subscription, so scores cannot be fetched from 
 ## Review
 
 Suggested changes to values you already have, for example a new drinking window from a bulk review, are listed under
-**Review**. Each suggestion shows the current value, the suggested value, the reason and sources. You can adjust the
-value before you accept it, or reject it. Empty fields, such as critic scores, are filled in directly and listed at
+**Review**. Each suggestion shows the current value, the suggested value, the reason and sources. You can adjust a
+value before you accept it, take or leave single values with ✓ / ✕, or accept or reject all values of a wine. Empty fields, such as critic scores, are filled in directly and listed at
 the bottom of the page with their source.
 
 **✨ AI review of the cellar** (on the Review page) looks up every wine in stock that has no peak of its own, using the

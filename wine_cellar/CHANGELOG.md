@@ -1,3 +1,6 @@
+# 1.12.0
+- Review: each suggested value has its own ✓ / ✕, so you can take the peak but keep your own drinking window (or the other way round). "Accept all" / "Reject all" per wine still work.
+
 # 1.11.1
 - AI review: resumes where it stopped after a restart; ignores one-year "windows" and peaks that cover the whole drinking window.
 

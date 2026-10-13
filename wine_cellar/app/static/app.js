@@ -819,7 +819,8 @@ async function renderReview() {
     <div class="panel wide">
       <h2>Review suggested changes</h2>
       <p>${pend.length ? `${pend.length} suggestions change values you already have. You can adjust a value before you accept it.` : "Nothing to review."}</p>
-      ${pend.length > 1 ? '<div class="row"><button class="btn" id="accAll">Accept all</button></div>' : ""}
+      ${pend.length ? '<p class="small muted">Use ✓ / ✕ to take or leave single values, or the buttons below a wine for all its values.</p>' : ""}
+      ${pend.length > 1 ? '<div class="row"><button class="btn" id="accAll">Accept every suggestion</button></div>' : ""}
     </div>
     <div class="panel wide" id="bulkPanel">
       <h3 class="sm">✨ AI review of the cellar</h3>
@@ -830,13 +831,14 @@ async function renderReview() {
     </div>
     ${pend.map((p) => `<div class="panel wide prop" data-pid="${p.id}">
       <div class="phead"><a href="#" data-openw="${p.wine_id}" class="wname">${esc(p.description)}</a><span class="tag">${esc(p.topic || "")}</span></div>
-      <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggested</th></tr></thead><tbody>
-      ${Object.entries(p.changes).map(([k, v]) => `<tr><td>${FLABEL[k] || k}</td><td class="muted">${esc(p.old[k] ?? "")}${yrsNote(p, k, p.old[k])}</td>
-        <td><input type="text" data-k="${k}" value="${esc(v ?? "")}">${yrsNote(p, k, v)}</td></tr>`).join("")}
+      <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggested</th><th></th></tr></thead><tbody>
+      ${Object.entries(p.changes).map(([k, v]) => `<tr data-fk="${k}"><td>${FLABEL[k] || k}</td><td class="muted">${esc(p.old[k] ?? "")}${yrsNote(p, k, p.old[k])}</td>
+        <td><input type="text" data-k="${k}" value="${esc(v ?? "")}">${yrsNote(p, k, v)}</td>
+        <td class="acts2"><button class="okb" data-f1="${p.id}" data-fk1="${k}" data-ok="1" title="Accept this value">✓</button><button class="nob" data-f1="${p.id}" data-fk1="${k}" title="Reject this value">✕</button></td></tr>`).join("")}
       </tbody></table>
       ${p.reason ? `<p class="small">${esc(p.reason)}</p>` : ""}
       ${p.sources.length ? `<p class="small muted">Sources: ${p.sources.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">${i + 1}</a>`).join(" · ")}</p>` : ""}
-      <div class="row"><button class="btn primary" data-acc="${p.id}">Accept</button><button class="btn" data-rej="${p.id}">Reject</button></div>
+      <div class="row"><button class="btn primary" data-acc="${p.id}">Accept all</button><button class="btn" data-rej="${p.id}">Reject all</button></div>
     </div>`).join("")}
     ${applied.length ? `<div class="panel wide"><details><summary><b>${applied.length} empty fields were filled in automatically</b></summary>
       <ul class="clean">${applied.map((p) => `<li><a href="#" data-openw="${p.wine_id}">${esc(p.description)}</a>:
@@ -878,6 +880,20 @@ $("#tab-review").addEventListener("click", async (e) => {
     $$("input[data-k]", card).forEach((i) => { changes[i.dataset.k] = i.value === "" ? null : (/^-?\d+$/.test(i.value) && i.dataset.k.endsWith("_age") ? Number(i.value) : i.value); });
     await send(`api/proposals/${id}/${accept ? "accept" : "reject"}`, "POST", { changes });
   };
+  if (b.dataset.f1) {  // one value
+    const card = $(`.prop[data-pid="${b.dataset.f1}"]`), k = b.dataset.fk1;
+    const inp = $(`input[data-k="${k}"]`, card);
+    let value = inp.value === "" ? null : inp.value;
+    if (value != null && k.endsWith("_age") && /^-?\d+$/.test(value)) value = Number(value);
+    try {
+      const r = await send(`api/proposals/${b.dataset.f1}/field`, "POST", { field: k, accept: !!b.dataset.ok, value });
+      $(`tr[data-fk="${k}"]`, card).remove();
+      if (!r.left) card.remove();
+      toast(b.dataset.ok ? "Saved" : "Rejected");
+      updateReviewCount(); refresh();
+    } catch (err) { toast("Error: " + err.message); }
+    return;
+  }
   try {
     if (b.dataset.acc) await decide(b.dataset.acc, true);
     else if (b.dataset.rej) await decide(b.dataset.rej, false);

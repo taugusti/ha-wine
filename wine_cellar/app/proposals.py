@@ -65,8 +65,45 @@ def decide(con, pid, accept, overrides=None):
     r = con.execute("SELECT * FROM proposal WHERE id=?", (pid,)).fetchone()
     if not r or r["status"] != "pending":
         raise ValueError("Proposal not found or already decided")
+    changes = json.loads(r["changes"])
+    acc = _accepted(con, pid)
     if accept:
-        changes = json.loads(r["changes"])
         changes.update({k: v for k, v in (overrides or {}).items() if k in changes})
         _apply(con, r["wine_id"], changes)
-    con.execute("UPDATE proposal SET status=?, decided_at=? WHERE id=?", ("accepted" if accept else "rejected", now(), pid))
+        acc.update(changes)
+    con.execute("UPDATE proposal SET changes=?, status=?, decided_at=? WHERE id=?",
+                (json.dumps(acc or changes, ensure_ascii=False), "accepted" if (accept or acc) else "rejected", now(), pid))
+    con.execute("DELETE FROM meta WHERE key=?", (f"prop_acc_{pid}",))
+
+
+def decide_field(con, pid, field, accept, value=None):
+    """Accept or reject one field of a pending proposal. The proposal is closed when no fields are left;
+    it counts as accepted if at least one field was accepted."""
+    r = con.execute("SELECT * FROM proposal WHERE id=?", (pid,)).fetchone()
+    if not r or r["status"] != "pending":
+        raise ValueError("Proposal not found or already decided")
+    changes, old = json.loads(r["changes"]), json.loads(r["old"] or "{}")
+    if field not in changes:
+        raise ValueError("Field not in this suggestion")
+    v = changes.pop(field)
+    acc = _accepted(con, pid)
+    if accept:
+        acc[field] = value if value is not None else v
+        _apply(con, r["wine_id"], {field: acc[field]})
+    old.pop(field, None)
+    if changes:
+        con.execute("UPDATE proposal SET changes=?, old=? WHERE id=?",
+                    (json.dumps(changes, ensure_ascii=False), json.dumps(old, ensure_ascii=False), pid))
+        con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?,?)", (f"prop_acc_{pid}", json.dumps(acc, ensure_ascii=False)))
+    else:
+        # nothing left: store what was accepted as the proposal's changes, for the history
+        con.execute("UPDATE proposal SET changes=?, status=?, decided_at=? WHERE id=?",
+                    (json.dumps(acc, ensure_ascii=False), "accepted" if acc else "rejected", now(), pid))
+        con.execute("DELETE FROM meta WHERE key=?", (f"prop_acc_{pid}",))
+    return {"left": len(changes)}
+
+
+def _accepted(con, pid):
+    """Fields already accepted one by one from a still-pending proposal."""
+    row = con.execute("SELECT value FROM meta WHERE key=?", (f"prop_acc_{pid}",)).fetchone()
+    return json.loads(row[0]) if row else {}
