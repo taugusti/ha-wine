@@ -23,7 +23,10 @@ Under **Import & export**, choose `vindatabase.xlsm`, press **Preview** and then
 ## Smart fill (AI lookup)
 
 When you create a wine, press **Front label** under **Smart fill** and take a photo; the lookup starts by itself.
-Press **Back label** to add the back label (grapes, barcode); the lookup is then updated. You can also paste invoice text and/or scan the barcode, alone or together
+Press **Back label** to add the back label (grapes, barcode); the lookup is then updated.
+The buttons open a camera view inside the app. This needs a secure (https) connection, e.g. via Nabu Casa;
+on a plain http connection, or if camera access is refused, the photo picker opens instead.
+"Or choose from gallery" lets you use an existing photo. You can also paste invoice text and/or scan the barcode, alone or together
 with the photos. The app:
 
 1. looks the barcode up in Open Food Facts (free, often unknown for wine),

@@ -94,6 +94,15 @@
   <video id="camVideo" playsinline muted></video>
   <button class="btn" id="camClose">Close</button>
 </div>
+<div class="pcam" id="pcam" hidden>
+  <div class="pcam-title" id="pcamTitle"></div>
+  <video id="pcamVideo" playsinline muted autoplay></video>
+  <div class="pcam-bar">
+    <button class="btn" id="pcamCancel">Cancel</button>
+    <button class="shutter" id="pcamShot" aria-label="Take photo"></button>
+    <span class="pcam-spacer"></span>
+  </div>
+</div>
 <div class="toast" id="toast" role="status"></div>
 
 <script src="static/app.js?v={{VERSION}}"></script>

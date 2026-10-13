@@ -1,3 +1,6 @@
+# 1.7.0
+- Front/back label buttons open a camera view inside the app (the Home Assistant Android app opened the gallery instead of the camera). "Or choose from gallery" is still available, and the gallery is used automatically if the camera cannot be opened.
+
 # 1.6.2
 - The app checks for a new version when it becomes visible (and every 2 minutes) and reloads itself, so an update is picked up even if the Home Assistant app keeps the page open.
 

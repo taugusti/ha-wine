@@ -361,9 +361,40 @@ function renderThumbs() {
     const p = aiPhotos[k];
     el.innerHTML = p
       ? `<span class="thumb"><img src="${p}" alt="${label}"><button type="button" data-rmphoto="${k}" title="Remove">×</button></span><span class="small">${label}</span>`
-      : `<label class="btn ${k === "front" ? "primary" : ""} bigphoto">📷 ${label}<input type="file" data-slot="${k}" accept="image/*" capture="environment" hidden></label>`;
+      : `<span class="pbtns"><button type="button" class="btn ${k === "front" ? "primary" : ""} bigphoto" data-shoot="${k}">📷 ${label}</button>
+         <label class="gallery small">or choose from gallery<input type="file" data-slot="${k}" accept="image/*" hidden></label></span>`;
   }
 }
+// in-page camera (the Home Assistant Android app opens the gallery for <input capture>, so we use getUserMedia)
+let pcamStream = null, pcamSlot = null;
+async function openPhotoCamera(slot) {
+  const fallback = () => { const inp = $(`input[data-slot="${slot}"]`); if (inp) inp.click(); };
+  if (!navigator.mediaDevices?.getUserMedia) { fallback(); return; }
+  try {
+    pcamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
+  } catch (e) { toast("Camera not available here, choose a photo instead"); fallback(); return; }
+  pcamSlot = slot;
+  $("#pcamTitle").textContent = SLOTS[slot];
+  const v = $("#pcamVideo"); v.srcObject = pcamStream; $("#pcam").hidden = false;
+  try { await v.play(); } catch { /* autoplay */ }
+}
+function closePhotoCamera() {
+  pcamStream?.getTracks().forEach((t) => t.stop()); pcamStream = null; $("#pcam").hidden = true;
+}
+$("#pcamCancel").addEventListener("click", closePhotoCamera);
+$("#pcamShot").addEventListener("click", async () => {
+  const v = $("#pcamVideo");
+  if (!v.videoWidth) return;
+  const max = 1600, k = Math.min(1, max / Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement("canvas");
+  c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  const slot = pcamSlot; closePhotoCamera();
+  aiPhotos[slot] = c.toDataURL("image/jpeg", 0.85);
+  renderThumbs();
+  if (aiPhotos.front || slot === "back") aiLookup();
+});
+
 const photoList = () => Object.keys(SLOTS).filter((k) => aiPhotos[k]);
 async function addPhoto(slot, file) {
   try { aiPhotos[slot] = await resizeImage(file); } catch { toast("Could not read the image"); return; }
@@ -470,6 +501,7 @@ $("#drawer").addEventListener("click", async (e) => {
   if (t.matches("[data-close]")) closeDrawer();
   else if (t.id === "saveW") saveWine();
   else if (t.id === "aiGo") aiLookup();
+  else if (t.dataset.shoot) openPhotoCamera(t.dataset.shoot);
   else if (t.dataset.rmphoto) { aiPhotos[t.dataset.rmphoto] = null; renderThumbs(); }
   else if (t.id === "aiApply") aiApply();
   else if (t.dataset.openwine) openWine(t.dataset.openwine);
