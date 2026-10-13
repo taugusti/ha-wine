@@ -38,11 +38,26 @@ CREATE TABLE IF NOT EXISTS movement (
 );
 CREATE INDEX IF NOT EXISTS movement_wine ON movement(wine_id);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+-- maps spelling variants to the canonical value of a field (alias is a fold() key)
+CREATE TABLE IF NOT EXISTS alias (
+  field TEXT NOT NULL, alias TEXT NOT NULL, canonical TEXT NOT NULL,
+  PRIMARY KEY (field, alias)
+);
 """
+
+# columns added after 1.1 - applied with ALTER TABLE on startup
+MIGRATIONS = [
+    ("wine", "size_cl", "INTEGER"),
+    ("wine", "rp_score", "TEXT"), ("wine", "rp_url", "TEXT"),
+    ("wine", "ws_score", "TEXT"), ("wine", "ws_url", "TEXT"),
+    ("wine", "js_score", "TEXT"), ("wine", "js_url", "TEXT"),
+    ("wine", "info", "TEXT"),
+]
 
 WINE_FIELDS = ["barcode", "description", "vintage", "wine_type", "country", "producer", "region", "grapes",
                "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "advice", "rationale", "serving",
-               "purchase_price", "list_price", "shop", "note", "link", "location", "archived"]
+               "purchase_price", "list_price", "shop", "note", "link", "location", "archived", "size_cl",
+               "rp_score", "rp_url", "ws_score", "ws_url", "js_score", "js_url", "info"]
 
 
 def now():
@@ -56,6 +71,10 @@ def connect():
     con.execute("PRAGMA foreign_keys=ON")
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(SCHEMA)
+    for table, col, typ in MIGRATIONS:
+        cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        if col not in cols:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
     return con
 
 

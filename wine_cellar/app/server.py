@@ -11,6 +11,7 @@ import re
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.request
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +21,8 @@ import db
 from db import WINE_FIELDS, now
 from estimate import estimate
 from importer import run_import
+import ai
+import vocab
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 PORT = int(os.environ.get("WINE_PORT", "8099"))
@@ -167,7 +170,7 @@ def changed():
 
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
-    server_version = "WineCellar/1.1"
+    server_version = "WineCellar/1.2"
 
     def log_message(self, fmt, *args):
         if os.environ.get("WINE_DEBUG"):
@@ -200,6 +203,9 @@ class H(BaseHTTPRequestHandler):
         path = re.sub(r"/+", "/", u.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if path.startswith("/api/ai/"):
+                # slow calls to Home Assistant: use a separate connection and do not block other requests
+                return self.dispatch_ai(method, path)
             with db.lock():
                 return self.dispatch(method, path, q)
         except ValueError as e:
@@ -220,6 +226,27 @@ class H(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self.route("DELETE")
 
+    def dispatch_ai(self, method, path):
+        if path == "/api/ai/status":
+            return self.send(200, {"entity": ai.ai_entity()})
+        if path == "/api/ai/lookup" and method == "POST":
+            d = self.json_body()
+            c = db.connect()
+            try:
+                cur = None
+                if d.get("wine_id"):
+                    r = c.execute("SELECT * FROM wine WHERE id=?", (int(d["wine_id"]),)).fetchone()
+                    cur = dict(r) if r else None
+                res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"))
+                return self.send(200, res)
+            except RuntimeError as e:
+                return self.send(502, {"error": str(e)})
+            except urllib.error.URLError as e:
+                return self.send(502, {"error": f"Could not reach Home Assistant: {e}"})
+            finally:
+                c.close()
+        return self.send(404, {"error": "not found"})
+
     def dispatch(self, method, path, q):
         c = db.con()
         if method == "GET" and not path.startswith("/api/"):
@@ -239,6 +266,7 @@ class H(BaseHTTPRequestHandler):
                 raise ValueError("Description is required.")
             if data.get("barcode") == "auto":
                 data["barcode"] = next_barcode()
+            vocab.Normalizer(c).wine(data)
             fields = [f for f in WINE_FIELDS if f in data]
             vals = [coerce(f, data[f]) for f in fields]
             ts = now()
@@ -264,6 +292,7 @@ class H(BaseHTTPRequestHandler):
             data = self.json_body()
             if data.get("barcode") == "auto":
                 data["barcode"] = next_barcode()
+            vocab.Normalizer(c).wine(data)
             fields = [f for f in WINE_FIELDS if f in data]
             if "description" in fields and not (data["description"] or "").strip():
                 raise ValueError("Description is required.")
@@ -313,6 +342,21 @@ class H(BaseHTTPRequestHandler):
             rows = [dict(id=r["id"], description=r["description"]) for r in
                     c.execute("SELECT id, description FROM wine WHERE barcode=?", (bc,))]
             return self.send(200, rows)
+        if path == "/api/vocab":
+            return self.send(200, vocab.vocab(c))
+        if path == "/api/vocab/suggestions":
+            return self.send(200, vocab.suggestions(c))
+        if path == "/api/vocab/merge" and method == "POST":
+            d = self.json_body()
+            c.execute("BEGIN")
+            try:
+                n = vocab.merge(c, d.get("field"), d.get("from"), d.get("to"))
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
+            changed()
+            return self.send(200, {"wines_changed": n})
         if path == "/api/next-barcode":
             return self.send(200, {"barcode": next_barcode()})
         if path == "/api/estimate" and method == "POST":
@@ -341,7 +385,7 @@ class H(BaseHTTPRequestHandler):
             buf = io.StringIO()
             cols = ["id", "description", "vintage", "wine_type", "producer", "country", "region", "grapes", "stock",
                     "drink_year_from", "drink_year_to", "window_source", "purchase_price", "list_price", "shop",
-                    "barcode", "location", "note", "link"]
+                    "barcode", "location", "note", "link", "size_cl", "rp_score", "ws_score", "js_score"]
             wr = csv.writer(buf, delimiter=";")
             wr.writerow(cols)
             for w in all_wines():

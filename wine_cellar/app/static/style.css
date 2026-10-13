@@ -92,15 +92,15 @@ tr.empty td { opacity: .55; }
   .tabs { order: 3; flex-basis: 100%; overflow-x: auto; }
   #newWine { margin-left: auto; }
   main { padding: 12px 12px 60px; }
-  thead { display: none; }
-  table, tbody, tr, td { display: block; }
-  tbody tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-  td { padding: 0; border: 0; }
-  td.c-name { grid-column: 1; }
-  td.c-stock { grid-column: 2; grid-row: 1; text-align: right; }
-  td.c-vint, td.c-grapes, td.c-price { display: none; }
-  td.c-region { grid-column: 1 / -1; }
-  td.c-win { grid-column: 1 / -1; margin-top: 6px; }
+  #tbl thead { display: none; }
+  #tbl, #tbl tbody, #tbl tr, #tbl td { display: block; }
+  #tbl tbody tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  #tbl td { padding: 0; border: 0; }
+  #tbl td.c-name { grid-column: 1; }
+  #tbl td.c-stock { grid-column: 2; grid-row: 1; text-align: right; }
+  #tbl td.c-vint, #tbl td.c-grapes, #tbl td.c-price { display: none; }
+  #tbl td.c-region { grid-column: 1 / -1; }
+  #tbl td.c-win { grid-column: 1 / -1; margin-top: 6px; }
 }
 
 /* drawer */
@@ -165,3 +165,37 @@ table.flow td, table.flow th { padding: 6px 10px; cursor: default; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 30px); opacity: 0; background: var(--text); color: var(--bg);
   padding: 10px 16px; border-radius: 10px; transition: all .2s; z-index: 30; pointer-events: none; max-width: 90vw; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* 1.2: smart fill, chips, scores, clean up */
+.small { font-size: 13px; }
+.smart summary { cursor: pointer; list-style: none; }
+.smart summary::-webkit-details-marker { display: none; }
+.smart summary h3 { display: inline; }
+.smart summary h3::after { content: " ▾"; }
+.smart:not([open]) summary h3::after { content: " ▸"; }
+.smart textarea { margin-top: 8px; min-height: 80px; }
+.smart .row input { flex: 1; min-width: 160px; }
+table.sugg { width: 100%; font-size: 13px; margin-top: 8px; }
+table.sugg th, table.sugg td { padding: 5px 6px; cursor: default; vertical-align: top; }
+table.sugg td:last-child { word-break: break-word; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 5px 6px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--surface); min-height: 38px; }
+.chips input[type=text] { border: 0; min-height: 28px; padding: 2px 4px; flex: 1; min-width: 120px; background: transparent; }
+.chips input[type=text]:focus { outline: none; }
+#chipList { display: contents; }
+.chipv { display: inline-flex; align-items: center; gap: 2px; background: var(--surface2); color: var(--text); border-radius: 99px;
+  padding: 2px 4px 2px 10px; font-size: 14px; }
+.chipv button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 5px; }
+.scores { display: grid; grid-template-columns: minmax(130px, auto) 80px 1fr auto; gap: 8px 10px; align-items: center; font-size: 14px; }
+.scores .links { display: flex; gap: 10px; white-space: nowrap; }
+@media (max-width: 560px) { .scores { grid-template-columns: 1fr 80px; } .scores input[type=url] { grid-column: 1 / -1; } .scores .links { grid-column: 1 / -1; } }
+.score { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; margin-left: 6px; border-radius: 4px;
+  background: var(--surface2); color: var(--accent); }
+h3.sm { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+ul.clean { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-direction: column; gap: 6px; }
+ul.clean li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+ul.clean input { flex: 1; min-width: 180px; }
+#cleanup details { margin: 6px 0; }
+#cleanup summary { cursor: pointer; padding: 4px 0; font-weight: 600; }
+.exist { margin: 10px 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--now); font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+.exist .btn { min-height: 30px; padding: 4px 10px; margin-left: 6px; }

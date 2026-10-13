@@ -16,6 +16,7 @@ import openpyxl
 
 from db import now
 from estimate import norm
+import vocab
 
 HEADER_MAP = {
     "beskrivelse": "description", "årgang": "vintage", "lager": "_excel_stock", "land": "country",
@@ -150,9 +151,22 @@ def run_import(con, data, dry_run=False, drop_app=False):
                "moves_in_file": len(moves), "moves_imported": 0, "orphan_barcodes": [], "orphan_moves": 0,
                "app_moves_kept": 0, "app_moves_deleted": 0, "stock_mismatch": [], "wines_not_in_file": [],
                "dry_run": dry_run}
+    summary["values_normalized"] = 0
     ts = now()
     con.execute("BEGIN")
     try:
+        # normalize spellings: aliases and existing values first, then the most used spelling in the file
+        nz = vocab.Normalizer(con)
+        for f, kind in vocab.FIELDS.items():
+            c = vocab.Counter()
+            for w in wines:
+                if w.get(f):
+                    c.update(vocab.split_parts(w[f]) if kind == "parts" else [str(w[f]).strip()])
+            for v, _ in c.most_common():
+                nz.maps[f].setdefault(vocab.key(v), v)
+        for w in wines:
+            nz.wine(w)
+        summary["values_normalized"] = nz.changes
         key_to_id = {}
         for w in wines:
             row = con.execute("SELECT * FROM wine WHERE import_key=?", (w["import_key"],)).fetchone()

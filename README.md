@@ -1,7 +1,8 @@
 # ha-wine – Wine Cellar for Home Assistant
 
 A Home Assistant app (add-on) with a wine database: stock, search, sorting by drinking window,
-auto-estimated drinking windows, statistics and import from the legacy Excel wine database.
+AI-assisted registration from invoice text and barcodes, consistent
+values, critic scores, auto-estimated drinking windows, statistics and import from the legacy Excel wine database.
 
 ## Installation
 

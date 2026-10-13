@@ -105,7 +105,12 @@ def estimate(wine):
 
     notes = [basis]
     desc = norm(wine.get("description"))
-    if "magnum" in desc:
+    try:
+        big = float(wine.get("size_cl") or 0) >= 150
+    except (TypeError, ValueError):
+        big = False
+    magnum = big or "magnum" in desc
+    if magnum:
         t += 3
         notes.append("magnum +3 years")
     price = wine.get("list_price") or wine.get("purchase_price")
@@ -113,7 +118,7 @@ def estimate(wine):
         price = float(price) if price not in (None, "") else None
     except (TypeError, ValueError):
         price = None
-    if price and wtype not in TYPE_RULES and "magnum" not in desc:
+    if price and wtype not in TYPE_RULES and not magnum:
         if price >= 600:
             t += 4
             notes.append("price >= 600 DKK +4 years")

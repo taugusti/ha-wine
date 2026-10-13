@@ -1,3 +1,13 @@
+# 1.2.0
+- Smart fill: paste invoice text and/or scan a barcode, and the wine is looked up with Home Assistant's AI Task
+  (and Open Food Facts for the barcode). Suggestions are reviewed field by field before they are applied.
+- Warning when a wine looks like one that is already in the cellar.
+- Country dropdown with "Add new", autocomplete for region, producer and shop, grapes as tags.
+- Values are normalized on save and import; "Clean up values" lets you merge duplicates, and merges are remembered.
+- Critic scores (Robert Parker / Wine Advocate, Wine Spectator, James Suckling) with review links and search links.
+- New fields: bottle size and "About the wine".
+- Fixed: mobile list layout and the "own" label under the drinking window.
+
 # 1.1.1
 - Fixed untranslated "All countries" filter label.
 

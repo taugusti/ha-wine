@@ -20,6 +20,39 @@ Under **Import & export**, choose `vindatabase.xlsm`, press **Preview** and then
 - The workbook's Danish sheet and column names (Vin, Lager, Beskrivelse, Årgang, …) are read as-is.
   Columns U–AA are not imported.
 
+## Smart fill (AI lookup)
+
+When you create a wine, paste the invoice text and/or scan the barcode under **Smart fill** and press **Look up**.
+The app:
+
+1. looks the barcode up in Open Food Facts (free, often unknown for wine),
+2. asks your Home Assistant **AI Task** (e.g. Google Gemini) to identify the wine, using the invoice text,
+   the barcode result and your existing countries, regions, grapes, producers and shops,
+3. shows the suggestions field by field. Tick the ones you want and press **Apply selected**, then save.
+
+It also warns you if the wine seems to exist already. On an existing wine, Smart fill can complete missing data
+(e.g. critic scores) from the current description.
+
+The AI Task entity is detected automatically. To choose a specific one, set `ai_task_entity` in the app
+configuration. No API key is stored in the app.
+
+## Consistent values
+
+Country is a dropdown with **+ Add new…**. Region, producer and shop suggest existing values while you type, and
+grapes are entered as tags. Every value is normalized when it is saved or imported: spellings that only differ in
+case, accents, spaces or hyphens become the most used spelling, and English country names map to the name you use
+(e.g. "France" → "Frankrig").
+
+Under **Import & export → Clean up values** you can merge likely duplicates (e.g. "Grernache" → "Grenache") and rename
+any value. Merges are remembered, so the old spelling is corrected automatically next time, also on Excel import.
+
+## Critic scores
+
+Each wine has fields for **Robert Parker (Wine Advocate)**, **Wine Spectator** and **James Suckling**, each with
+a link to the review and a **Search** link (a Google search on the critic's site). The AI only fills in a score when it
+knows a published score for that exact vintage; check it with the link. Scores are shown as badges in the wine list.
+The critics' own sites require a subscription, so scores cannot be fetched from them automatically.
+
 ## Drinking window
 
 The window is given in years after vintage, as in Excel. Your own window (Drink age from/to) is used. If it is
@@ -41,6 +74,11 @@ The app keeps these sensors updated:
 - `sensor.wine_cellar_bottles`: bottles in stock
 - `sensor.wine_cellar_drink_this_year`: bottles whose last drinking year is this year or earlier
 - `sensor.wine_cellar_ready`: bottles within their drinking window
+
+## Configuration
+
+- `ai_task_entity` (optional): the AI Task entity used by Smart fill, e.g. `ai_task.google_ai_task`.
+  Empty means the first AI Task entity found.
 
 ## Data and backup
 
