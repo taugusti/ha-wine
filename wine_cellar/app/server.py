@@ -26,6 +26,16 @@ import vocab
 import proposals
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+def _version():
+    try:  # config.yaml is copied into the image next to the app
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")) as fh:
+            m = re.search(r'^version:\s*"?([^"\n]+)"?', fh.read(), re.M)
+            return m.group(1) if m else "dev"
+    except OSError:
+        return "dev"
+
+
+VERSION = os.environ.get("WINE_VERSION") or _version()
 PORT = int(os.environ.get("WINE_PORT", "8099"))
 OWN_PREFIX = os.environ.get("WINE_BARCODE_PREFIX", "999888777")
 INT_FIELDS = {"vintage", "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "archived"}
@@ -258,7 +268,10 @@ class H(BaseHTTPRequestHandler):
             if not f.startswith(STATIC) or not os.path.isfile(f):
                 return self.send(404, {"error": "not found"})
             with open(f, "rb") as fh:
-                return self.send(200, fh.read(), mimetypes.guess_type(f)[0] or "application/octet-stream")
+                body = fh.read()
+            if name == "index.html":  # cache-bust static files per version, and show the version
+                body = body.replace(b"{{VERSION}}", VERSION.encode())
+            return self.send(200, body, mimetypes.guess_type(f)[0] or "application/octet-stream")
 
         mph = re.fullmatch(r"/api/photo/([\w.-]+)", path)
         if mph and method == "GET":

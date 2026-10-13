@@ -1,6 +1,7 @@
 FROM python:3.12-alpine
 RUN pip install --no-cache-dir openpyxl==3.1.5
 COPY app /app
+COPY config.yaml /app/config.yaml
 WORKDIR /app
 ENV WINE_DB=/data/wine_cellar.db \
     WINE_PORT=8099 \

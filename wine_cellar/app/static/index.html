@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wine Cellar</title>
-<link rel="stylesheet" href="static/style.css">
+<link rel="stylesheet" href="static/style.css?v={{VERSION}}">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark" aria-hidden="true"></span>Wine Cellar</div>
+  <div class="brand"><span class="mark" aria-hidden="true"></span>Wine Cellar<span class="ver">v{{VERSION}}</span></div>
   <nav class="tabs" role="tablist">
     <button data-tab="list" class="on">Wines</button>
     <button data-tab="stats">Statistics</button>
@@ -96,6 +96,6 @@
 </div>
 <div class="toast" id="toast" role="status"></div>
 
-<script src="static/app.js"></script>
+<script src="static/app.js?v={{VERSION}}"></script>
 </body>
 </html>

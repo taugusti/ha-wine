@@ -199,6 +199,7 @@ function scoreBadges(w) {
 const SIZES = [[37.5, "37.5 cl (half)"], [50, "50 cl"], [75, "75 cl"], [150, "150 cl (magnum)"], [300, "300 cl (double magnum)"]];
 
 async function openWine(id, preset = {}) {
+  if (!aiEntity) { try { aiEntity = (await api("api/ai/status")).entity; } catch { /* AI not available */ } }
   const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "red", vintage: "", movements: [], stock: 0, size_cl: 75, ...preset };
   current = w;
   aiPhotos = { front: null, back: null };

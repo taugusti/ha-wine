@@ -1,5 +1,5 @@
 name: Wine Cellar
-version: "1.6.0"
+version: "1.6.1"
 slug: wine_cellar
 description: Wine database with stock, search and drinking windows
 url: https://github.com/taugusti/ha-wine

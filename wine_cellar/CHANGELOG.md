@@ -1,3 +1,7 @@
+# 1.6.1
+- Fixed: Smart fill (photo buttons) could show as "not available" if the drawer was opened before the AI status was loaded.
+- Static files are cache-busted per version, and the version is shown next to the app name.
+
 # 1.6.0
 - Web search step: after the wine is identified, a Home Assistant conversation agent with web search (e.g. a Gemini
   agent with "Enable Google Search tool") looks up Danish prices for one bottle and published critic scores, with links.
