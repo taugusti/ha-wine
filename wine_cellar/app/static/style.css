@@ -374,3 +374,20 @@ a.btn { text-decoration: none; }
 @media (max-width: 560px) { .offers { grid-template-columns: 1fr; } }
 .tabs button { white-space: nowrap; flex: none; }
 @media (max-width: 560px) { .tabs { scrollbar-width: none; } .tabs button { padding: 8px 10px; } }
+
+/* 1.16: camera barcode scanner + checkout */
+.cam { justify-content: center; gap: 0; }
+.cam video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; }
+.scanframe { position: relative; width: min(80vw, 420px); aspect-ratio: 5 / 3; border-radius: 14px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); border: 2px solid rgba(255, 255, 255, .9); }
+.scanframe span { position: absolute; left: 8%; right: 8%; top: 50%; height: 2px; background: #ff5a5a; box-shadow: 0 0 8px #ff5a5a;
+  animation: scanline 1.6s ease-in-out infinite alternate; }
+@keyframes scanline { from { top: 15%; } to { top: 85%; } }
+.scanhint { position: relative; color: #fff; margin-top: 18px; font-size: 15px; text-shadow: 0 1px 3px #000; }
+.scanbar { position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom)); display: flex; justify-content: center; gap: 12px; }
+.scanbar .btn { min-width: 110px; min-height: 44px; background: rgba(255, 255, 255, .92); color: #222; border: 0; }
+#camTorch.on { background: #ffd54a; }
+.scanbtn { padding: 6px 10px; }
+.stockc.checkout { border: 2px solid var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+.cohint { font-size: 14px; margin-bottom: 10px; }
+.stockc.checkout [data-mv=out] { min-width: 90px; font-size: 16px; }

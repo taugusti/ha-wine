@@ -24,7 +24,7 @@
     <div class="toolbar">
       <div class="search">
         <input id="q" type="search" placeholder="Search wine, producer, region, grape … or scan a barcode" autocomplete="off">
-        <button class="btn icon" id="camBtn" hidden title="Scan with camera">⌁</button>
+        <button class="btn icon scanbtn" id="camBtn" hidden title="Scan a barcode with the camera" aria-label="Scan barcode"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg></button>
       </div>
       <select id="fCountry"><option value="">All countries</option></select>
       <select id="fStatus">
@@ -94,8 +94,13 @@
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 
 <div class="cam" id="cam" hidden>
-  <video id="camVideo" playsinline muted></video>
-  <button class="btn" id="camClose">Close</button>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="scanframe"><span></span></div>
+  <div class="scanhint" id="scanHint">Point the camera at the barcode</div>
+  <div class="scanbar">
+    <button class="btn" id="camClose">Cancel</button>
+    <button class="btn" id="camTorch" hidden>💡 Light</button>
+  </div>
 </div>
 <div class="pcam" id="pcam" hidden>
   <div class="pcam-title" id="pcamTitle"></div>

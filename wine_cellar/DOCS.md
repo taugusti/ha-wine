@@ -126,7 +126,9 @@ dashed band, until a real peak is set by **✨ Update with AI** or by hand.
 
 Type or scan a barcode in the search field and press Enter. A USB scanner works too. Known wines open directly,
 and unknown barcodes start a new wine. **New code** continues your own EAN-13 series (999888777xxx + check digit).
-On Android (Chrome or the HA app) a camera button appears for scanning.
+The barcode button next to the search field scans with the phone camera (also in the Home Assistant app; the
+app needs camera permission, and the page must be opened over https, e.g. via Nabu Casa). A scanned wine opens in
+**check-out mode**: the stock is shown first, and **Out** takes the bottle out and closes the wine.
 
 ## Home Assistant sensors
 

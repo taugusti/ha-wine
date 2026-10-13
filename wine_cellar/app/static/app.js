@@ -203,7 +203,7 @@ function scoreBadges(w) {
 const SIZES = [[37.5, "37.5 cl (half)"], [50, "50 cl"], [75, "75 cl"], [150, "150 cl (magnum)"], [300, "300 cl (double magnum)"]];
 
 let editOpen = false; // keep "Edit details" open when the wine is re-opened after saving
-async function openWine(id, preset = {}, keepScroll = 0) {
+async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
   if (!id || Number(id) !== current?.id) editOpen = false;
   if (!aiEntity) { try { aiEntity = (await api("api/ai/status")).entity; } catch { /* AI not available */ } }
   const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "red", vintage: "", movements: [], stock: 0, size_cl: 75, ...preset };
@@ -322,6 +322,15 @@ async function openWine(id, preset = {}, keepScroll = 0) {
   if (!isNew) renderOverview();
   snapshotForm(); updateDirty();
   if (keepScroll) d.scrollTop = keepScroll;
+  if (opts.checkout && !isNew) {   // opened by scanning a bottle: go straight to taking it out
+    const sc = $("#drawer .stockc");
+    sc.classList.add("checkout"); current.checkout = true;
+    sc.insertAdjacentHTML("afterbegin", w.stock > 0 ? '<div class="cohint">Scanned. Tap <b>Out</b> to take a bottle out of the cellar.</div>'
+      : '<div class="cohint warn">Scanned, but there are no bottles of this wine in stock.</div>');
+    $("#ov").before(sc);   // stock first, right under the name
+    d.scrollTop = 0;
+    $("#drawer [data-mv=out]").focus({ preventScroll: true });
+  }
   $("#wf").addEventListener("submit", (e) => e.preventDefault());
   if (isNew && preset.barcode) $("#aiText")?.focus();
 }
@@ -685,6 +694,10 @@ async function move(kind) {
   if (!Number.isFinite(n) || n < 0 || (kind !== "count" && n === 0)) { toast("Enter a valid quantity"); return; }
   try {
     const r = await send("api/movements", "POST", { wine_id: current.id, kind, qty: n, count: n, date: $("#mvDate").value });
+    if (current.checkout && kind === "out" && !isDirty()) {   // scanned bottle taken out: done
+      toast(`${n === 1 ? "1 bottle" : n + " bottles"} out · ${r.stock} left of ${current.description}`);
+      closeDrawer(); await refresh(); return;
+    }
     toast(`${KIND[kind]} recorded, stock: ${r.stock}`);
     await refresh(); reopenKeepingEdits();
   } catch (e) { toast("Error: " + e.message); }
@@ -777,28 +790,99 @@ $("#q").addEventListener("keydown", (e) => {
   if (/^\d{6,14}$/.test(v)) { e.preventDefault(); scanned(v); }
 });
 
-async function scanned(code) {
+async function scanned(code, fromCamera = false) {
   const hits = await api("api/lookup?barcode=" + encodeURIComponent(code));
   $("#q").value = ""; render();
-  if (hits.length === 1) openWine(hits[0].id);
+  if (hits.length === 1) openWine(hits[0].id, {}, 0, { checkout: fromCamera });
   else if (hits.length > 1) { $("#q").value = code; $("#fAll").checked = true; render(); toast(`${hits.length} wines share this barcode`); }
   else { toast("Unknown barcode, creating a new wine"); openWine(null, { barcode: code }); }
 }
 
-if ("BarcodeDetector" in window && navigator.mediaDevices) {
-  $("#camBtn").hidden = false;
-  let stream = null, timer = null;
-  const stop = () => { clearInterval(timer); stream?.getTracks().forEach((t) => t.stop()); $("#cam").hidden = true; };
-  $("#camBtn").addEventListener("click", async () => {
+// ---- camera barcode scanner: the browser's BarcodeDetector when it has one, otherwise ZXing (loaded on first use)
+const ZXING_SRC = ["static/vendor/zxing.min.js", "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"];
+async function loadZXing() {
+  for (const src of ZXING_SRC) {
+    if (window.ZXing) break;
     try {
-      const det = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      const v = $("#camVideo"); v.srcObject = stream; await v.play(); $("#cam").hidden = false;
-      timer = setInterval(async () => {
-        const codes = await det.detect(v).catch(() => []);
-        if (codes.length) { stop(); scanned(codes[0].rawValue); }
-      }, 250);
-    } catch (e) { toast("Camera not available: " + e.message); stop(); }
+      await new Promise((ok, bad) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = bad; document.head.appendChild(el); });
+    } catch { /* try the next source */ }
+  }
+  if (!window.ZXing) throw new Error("the barcode reader could not be loaded");
+  return window.ZXing;
+}
+const validEan = (c) => {
+  if (!/^\d{8}$|^\d{12,13}$/.test(c)) return /^[\w-]{4,}$/.test(c);   // code 128 etc.: accept as read
+  const d = c.padStart(13, "0").split("").map(Number);
+  const sum = d.slice(0, 12).reduce((s, x, i) => s + x * (i % 2 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === d[12];
+};
+let scanDetect = null, scanNative = false;
+async function makeDetector() {
+  if (scanDetect) return scanDetect;
+  const want = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
+  if ("BarcodeDetector" in window) {
+    try {
+      const have = await BarcodeDetector.getSupportedFormats();
+      const fm = want.filter((f) => have.includes(f));
+      if (fm.includes("ean_13")) {
+        const det = new BarcodeDetector({ formats: fm }); scanNative = true;
+        return (scanDetect = async (v) => (await det.detect(v).catch(() => []))[0]?.rawValue || null);
+      }
+    } catch { /* fall back to ZXing */ }
+  }
+  const Z = await loadZXing();
+  const hints = new Map();
+  hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128]);
+  hints.set(Z.DecodeHintType.TRY_HARDER, true);
+  const reader = new Z.MultiFormatReader(); reader.setHints(hints);
+  const cv = document.createElement("canvas"), ctx = cv.getContext("2d", { willReadFrequently: true });
+  return (scanDetect = async (v) => {
+    if (!v.videoWidth) return null;
+    // the middle band of the picture, where the frame is shown
+    const sw = v.videoWidth * 0.8, sh = Math.min(v.videoHeight * 0.45, sw * 0.6), k = Math.min(1, 800 / sw);
+    cv.width = Math.round(sw * k); cv.height = Math.round(sh * k);
+    ctx.drawImage(v, (v.videoWidth - sw) / 2, (v.videoHeight - sh) / 2, sw, sh, 0, 0, cv.width, cv.height);
+    try { return reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)))).getText(); }
+    catch { return null; }
+  });
+}
+
+if (navigator.mediaDevices?.getUserMedia && window.isSecureContext) {
+  $("#camBtn").hidden = false;
+  let stream = null, timer = null, last = null, busy = false;
+  const stop = () => { clearTimeout(timer); timer = null; stream?.getTracks().forEach((t) => t.stop()); stream = null; $("#cam").hidden = true; };
+  const tick = async () => {
+    if (!stream) return;
+    if (!busy) {
+      busy = true;
+      const code = await scanDetect($("#camVideo")).catch(() => null);
+      busy = false;
+      if (code && validEan(code)) {
+        // ZXing can misread a digit now and then: wait for the same code twice
+        if (scanNative || code === last) {
+          stop(); navigator.vibrate?.(80); scanned(code, true); return;
+        }
+        last = code;
+      }
+    }
+    timer = setTimeout(tick, 150);
+  };
+  $("#camBtn").addEventListener("click", async () => {
+    $("#scanHint").textContent = "Point the camera at the barcode"; last = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      const v = $("#camVideo"); v.srcObject = stream; $("#cam").hidden = false;
+      try { await v.play(); } catch { /* autoplay */ }
+      const track = stream.getVideoTracks()[0];
+      $("#camTorch").hidden = !track.getCapabilities?.().torch;
+      try { await makeDetector(); } catch (e) { stop(); toast("Scanner not available: " + e.message + ". Type the barcode instead."); return; }
+      tick();
+    } catch (e) { stop(); toast("Camera not available: " + e.message); }
+  });
+  $("#camTorch").addEventListener("click", async () => {
+    const track = stream?.getVideoTracks()[0]; if (!track) return;
+    const on = !$("#camTorch").classList.contains("on");
+    try { await track.applyConstraints({ advanced: [{ torch: on }] }); $("#camTorch").classList.toggle("on", on); } catch { /* no torch */ }
   });
   $("#camClose").addEventListener("click", stop);
 }
