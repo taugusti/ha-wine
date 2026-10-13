@@ -128,7 +128,7 @@ def web_search(agent, s):
         ' "critic_window": str or null, "critic_window_source": str or null}',
     ])
     resp = _ha("POST", "/api/services/conversation/process?return_response",
-               {"agent_id": agent, "language": "en", "text": q}, timeout=120)
+               {"agent_id": agent, "language": "en", "text": q}, timeout=100)
     r = (resp or {}).get("service_response", {}).get("response", {}) if isinstance(resp, dict) else {}
     speech = r.get("speech", {}).get("plain", {}).get("speech", "")
     if r.get("response_type") == "error":
@@ -298,7 +298,8 @@ def _clean(d):
     return out
 
 
-def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, progress=None, use_saved_photo=False):
+def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, progress=None, use_saved_photo=False,
+           on_partial=None):
     progress = progress or (lambda stage: None)
     entity = ai_entity()
     if not entity:
@@ -333,14 +334,17 @@ def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, pro
     if saved and not (current or {}).get("photo"):
         s["photo"] = saved[0][0]
     search = {"agent": search_entity()}
+    existing = find_existing(con, s, barcode, (current or {}).get("id"))
     if search["agent"] and (s.get("description") or s.get("producer")):
+        if on_partial:  # show the identification right away; the web search can take a while
+            on_partial({"suggestion": json.loads(json.dumps(s)), "barcode_info": binfo, "entity": entity,
+                        "search": {"agent": search["agent"], "pending": True}, "existing": existing})
         progress("searching the web for prices and scores")
         try:
             search.update(merge_search(s, web_search(search["agent"], s)))
         except Exception as e:  # noqa: BLE001 - the lookup still works without web search
             search["error"] = str(e)[:300]
-    return {"suggestion": s, "barcode_info": binfo, "entity": entity, "search": search,
-            "existing": find_existing(con, s, barcode, (current or {}).get("id"))}
+    return {"suggestion": s, "barcode_info": binfo, "entity": entity, "search": search, "existing": existing}
 
 
 def find_existing(con, s, barcode, own_id=None):

@@ -405,6 +405,7 @@ async function addPhoto(slot, file) {
 }
 
 let aiJob = null;      // the running background lookup {id}
+let aiDecisions = {};  // field -> {d: "acc"|"rej", v: value} for the current lookup
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function aiLookup() {
@@ -414,8 +415,8 @@ async function aiLookup() {
   const slots = photoList();
   if (!text && !barcode && !slots.length && !current.id) { toast("Take a photo, paste invoice text or enter a barcode"); return; }
   if (aiJob) { aiLookup.again = true; return; }   // a newer photo arrived while running: run again afterwards
-  const job = { id: null };
-  aiJob = job;
+  const job = { id: null, partialShown: false };
+  aiJob = job; aiDecisions = {};
   btn.disabled = true; $("#aiResult").innerHTML = "";
   const wineId = current.id;
   const showStatus = (txt) => {
@@ -435,12 +436,20 @@ async function aiLookup() {
       const j = await api(`api/ai/job/${job.id}`);
       if (aiJob !== job) return;
       if (j.status === "running") {
-        if (j.elapsed > 180) { await api(`api/ai/job/${job.id}/cancel`, { method: "POST" }).catch(() => {}); throw new Error("The lookup took too long."); }
-        showStatus(`Step: ${j.stage} … ${j.elapsed} s`);
+        if (j.partial && !job.partialShown) { job.partialShown = true; job.partial = j.partial; renderSuggestions(j.partial); }
+        if (j.elapsed > 180) {
+          await api(`api/ai/job/${job.id}/cancel`, { method: "POST" }).catch(() => {});
+          if (job.partialShown) { finishPartial(job, "The web search took too long and was stopped."); break; }
+          throw new Error("The lookup took too long.");
+        }
+        showStatus(`${job.partialShown ? "Suggestions are ready. Still " : "Step: "}${j.stage} … ${j.elapsed} s`);
         continue;
       }
-      if (j.status === "done") { renderSuggestions(j.result); break; }
-      if (j.status === "error") throw new Error(j.error);
+      if (j.status === "done") { renderSuggestions(j.result); $("#aiStatus").textContent = ""; break; }
+      if (j.status === "error") {
+        if (job.partialShown) { finishPartial(job, `The web search failed: ${j.error}`); break; }
+        throw new Error(j.error);
+      }
       return; // cancelled elsewhere
     }
   } catch (e) {
@@ -453,6 +462,12 @@ async function aiLookup() {
   }
 }
 
+function finishPartial(job, msg) {
+  const p = job.partial; p.search = { agent: p.search?.agent, error: msg };
+  renderSuggestions(p);
+  $("#aiStatus").textContent = "";
+}
+
 function aiFailed(msg) {
   $("#aiStatus").textContent = "";
   $("#aiResult").innerHTML = `<div class="doubt low"><b>The lookup failed</b><div>${esc(msg)}</div>
@@ -462,7 +477,13 @@ function aiFailed(msg) {
 function aiCancel() {
   if (!aiJob) return;
   if (aiJob.id) api(`api/ai/job/${aiJob.id}/cancel`, { method: "POST" }).catch(() => {});
+  const job = aiJob;
   aiJob = null; aiLookup.again = false;
+  if (job.partialShown && $("#aiResult")) {   // keep the suggestions, only stop the web search
+    if ($("#aiGo")) $("#aiGo").disabled = false;
+    finishPartial(job, "Web search stopped.");
+    return;
+  }
   const g = $("#aiGo"), st = $("#aiStatus"), res = $("#aiResult");
   if (g) g.disabled = false;
   if (st) st.textContent = "";
@@ -475,17 +496,18 @@ function renderSuggestions(r) {
   const f = formData(), isNew = !current.id;
   const cur = (k) => (k === "quantity" ? f.initial_qty : f[k]) ?? "";
   const rows = SUGG_FIELDS.filter(([k]) => r.suggestion[k] != null && r.suggestion[k] !== "" && (k !== "quantity" || isNew))
-    .filter(([k]) => String(r.suggestion[k]) !== String(cur(k)));
+    .filter(([k]) => aiDecisions[k] || String(r.suggestion[k]) !== String(cur(k)));
   const unsure = new Set(r.suggestion.uncertain_fields || []);
   const conf = (r.suggestion.confidence || "unknown").toLowerCase();
-  st.textContent = `Confidence: ${conf}${r.barcode_info ? ` · barcode found in ${r.barcode_info.source}` : ""}`;
+  if (!aiJob) st.textContent = "";
+  const confLine = `<p class="small muted">Confidence: ${esc(conf)}${r.barcode_info ? ` · barcode found in ${esc(r.barcode_info.source)}` : ""}</p>`;
   const doubt = conf !== "high" || unsure.size || r.suggestion.uncertainty_note ? `<div class="doubt ${conf === "low" ? "low" : ""}">
     <b>⚠ ${conf === "low" ? "The AI is not sure it identified the right wine." : unsure.size ? "The AI is unsure about some details." : "Please check the suggestions."}</b>
     ${r.suggestion.uncertainty_note ? `<div>${esc(r.suggestion.uncertainty_note)}</div>` : ""}
     ${unsure.size ? `<div class="small">Marked with ⚠ below: ${[...unsure].map((k) => (SUGG_FIELDS.find(([fk]) => fk === k) || [k, k])[1]).join(", ")}.</div>` : ""}</div>` : "";
   const sr = r.search || {};
   const web = sr.agent ? `<div class="websearch small">
-    ${sr.error ? `<b>Web search failed</b> (${esc(sr.agent)}): ${esc(sr.error)}. The suggestions below are based on the AI's own knowledge.`
+    ${sr.pending ? `<span><span class="spin"></span> Searching the web for prices and critic scores … they are added here when found. You can accept suggestions meanwhile.</span>` : sr.error ? `<b>Web search failed</b> (${esc(sr.agent)}): ${esc(sr.error)}. The suggestions below are based on the AI's own knowledge.`
       : `<b>Web search</b> (${esc(sr.agent)})${sr.price_note ? ` · price: ${esc(sr.price_note)}` : ""}${sr.critic_window ? ` · critic drinking window: ${esc(sr.critic_window)}` : ""}
          ${(sr.sources || []).length ? `<div>${sr.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join(" · ")}</div>` : "<div class=\"muted\">No price or critic scores found online.</div>"}`}
     </div>` : "";
@@ -494,8 +516,8 @@ function renderSuggestions(r) {
     ${r.existing.map((x) => `<div>${esc(x.description)} <span class="muted">(${x.stock} in stock, ${esc(x.reason)})</span>
       <button type="button" class="btn" data-openwine="${x.id}">Open it</button></div>`).join("")}
     <span class="muted small">To add bottles to an existing wine, open it and use "In".</span></div>` : "";
-  if (!rows.length) { $("#aiResult").innerHTML = doubt + web + ex + '<p class="muted small">No new information found.</p>'; return; }
-  $("#aiResult").innerHTML = doubt + web + ex + `
+  if (!rows.length) { $("#aiResult").innerHTML = confLine + doubt + web + ex + '<p class="muted small">No new information found.</p>'; return; }
+  $("#aiResult").innerHTML = confLine + doubt + web + ex + `
     <div class="row"><button type="button" class="btn primary" id="aiAcceptAll">Accept all</button>
       <span class="muted small">${isNew ? "Accepted values are filled into the form; save when you are done." : "Accepted values are saved right away."}</span></div>
     <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggestion</th><th></th></tr></thead><tbody>
@@ -505,6 +527,15 @@ function renderSuggestions(r) {
         <td class="acts2"><button type="button" class="okb" data-acc1="${k}" title="Accept">✓</button><button type="button" class="nob" data-rej1="${k}" title="Reject">✕</button></td></tr>`;
     }).join("")}
     </tbody></table>`;
+  for (const [k, dec] of Object.entries(aiDecisions)) {   // keep earlier decisions when results are updated
+    const tr = $(`#aiResult tr[data-row="${k}"]`);
+    if (tr && String(dec.v) === String(r.suggestion[k])) markRow(tr, dec.d === "acc");
+  }
+}
+
+function markRow(tr, accept) {
+  tr.classList.add("done", accept ? "acc" : "rej");
+  tr.lastElementChild.innerHTML = accept ? '<span class="ok">✓ accepted</span>' : '<span class="muted">rejected</span>';
 }
 
 function applyField(k, v) {
@@ -532,9 +563,8 @@ async function decideRows(keys, accept) {
     renderEst(); scoreLinks();
   }
   keys.forEach((k) => {
-    const tr = $(`#aiResult tr[data-row="${k}"]`);
-    tr.classList.add("done", accept ? "acc" : "rej");
-    tr.lastElementChild.innerHTML = accept ? '<span class="ok">✓ accepted</span>' : '<span class="muted">rejected</span>';
+    aiDecisions[k] = { d: accept ? "acc" : "rej", v: lastSugg[k] };
+    markRow($(`#aiResult tr[data-row="${k}"]`), accept);
   });
 }
 

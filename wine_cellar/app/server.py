@@ -188,11 +188,16 @@ def start_lookup(d):
     with _jobs_lock:
         for k in [k for k, j in _jobs.items() if time.time() - j["started"] > 3600]:
             del _jobs[k]
-        _jobs[jid] = {"status": "running", "stage": "starting", "result": None, "error": None, "started": time.time()}
+        _jobs[jid] = {"status": "running", "stage": "starting", "result": None, "partial": None, "error": None,
+                      "started": time.time()}
 
     def stage(s):
         with _jobs_lock:
             _jobs[jid]["stage"] = s
+
+    def partial(res):
+        with _jobs_lock:
+            _jobs[jid]["partial"] = res
 
     def run():
         c = db.connect()
@@ -202,7 +207,7 @@ def start_lookup(d):
                 r = c.execute("SELECT * FROM wine WHERE id=?", (int(d["wine_id"]),)).fetchone()
                 cur = dict(r) if r else None
             res = ai.lookup(c, d.get("text") or "", d.get("barcode") or "", cur or d.get("current"), d.get("photos"),
-                            d.get("photo_labels"), progress=stage, use_saved_photo=bool(d.get("use_saved_photo")))
+                            d.get("photo_labels"), progress=stage, use_saved_photo=bool(d.get("use_saved_photo")), on_partial=partial)
             upd = {"status": "done", "result": res}
         except urllib.error.URLError as e:
             upd = {"status": "error", "error": f"Could not reach Home Assistant: {e}"}
@@ -290,7 +295,7 @@ class H(BaseHTTPRequestHandler):
                     return self.send(404, {"error": "Lookup not found (the app may have restarted)."})
                 if mj[2] and method == "POST" and j["status"] == "running":
                     j["status"] = "cancelled"
-                out = {k: j[k] for k in ("status", "stage", "result", "error")}
+                out = {k: j[k] for k in ("status", "stage", "result", "partial", "error")}
                 out["elapsed"] = int(time.time() - j["started"])
             return self.send(200, out)
         return self.send(404, {"error": "not found"})

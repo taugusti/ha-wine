@@ -1,3 +1,7 @@
+# 1.8.1
+- Suggestions are shown as soon as the wine is identified; the web search (prices, critic scores) continues in the background and its results are added when they arrive. Your accept/reject decisions are kept.
+- Cancel during the web search keeps the suggestions and only stops the search. Web search time limit 100 s.
+
 # 1.8.0
 - Lookups run in the background with live progress (step and seconds), so slow lookups no longer end in "Bad Gateway".
 - Cancel a running lookup and fill in the fields yourself; failed lookups show a Retry button.
