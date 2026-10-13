@@ -1,3 +1,7 @@
+# 1.14.0
+- Statistics are based on the peak period: bottles at peak now and past their peak, bottles at peak per year (the coming years), bottles by end of peak (replaces last drinking year) and bottles by status, as in the list.
+- New Home Assistant sensor `sensor.wine_cellar_at_peak`.
+
 # 1.13.1
 - Drinking windows use the wine's value (normal price) instead of the purchase price, which is often a steep discount. This applies to the rule estimate and to the AI, which is told to ignore the price paid. The "Estimated price" field is now called "Value (DKK, normal price)".
 

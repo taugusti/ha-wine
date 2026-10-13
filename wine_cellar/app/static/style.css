@@ -346,3 +346,9 @@ h3.sub3 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
   .askbtns { flex-direction: column-reverse; align-items: stretch; }
   .askbtns .btn { min-height: 44px; }
 }
+
+/* 1.14: statistics by peak */
+.hb.st-over .t { background: var(--over); } .hb.st-now .t { background: var(--now); }
+.hb.st-peak .t { background: #2e7d6b; } .hb.st-ready .t { background: var(--ready); }
+.hb.st-young .t { background: var(--young); } .hb.st-unknown .t { background: var(--muted); }
+@media (prefers-color-scheme: dark) { .hb.st-peak .t { background: #6fd1b5; } }

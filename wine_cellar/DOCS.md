@@ -124,6 +124,7 @@ The app keeps these sensors updated:
 - `sensor.wine_cellar_bottles`: bottles in stock
 - `sensor.wine_cellar_drink_this_year`: bottles whose last drinking year is this year or earlier
 - `sensor.wine_cellar_ready`: bottles within their drinking window
+- `sensor.wine_cellar_at_peak`: bottles in their peak period this year
 
 ## Configuration
 

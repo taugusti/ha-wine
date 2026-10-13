@@ -126,29 +126,54 @@ def relink_orphans(wine_id, barcode):
         db.con().execute("UPDATE movement SET wine_id=? WHERE wine_id IS NULL AND barcode=?", (wine_id, barcode))
 
 
+def wine_status(w, y):
+    """Same status as in the list: over / now / peak / ready / young / unknown."""
+    f, t = w.get("drink_year_from"), w.get("drink_year_to")
+    if t is None:
+        return "unknown"
+    if y > t:
+        return "over"
+    if y >= t - 1:
+        return "now"
+    if w.get("peak_year_from") is not None and w["peak_year_from"] <= y <= w["peak_year_to"]:
+        return "peak"
+    return "ready" if y >= f else "young"
+
+
 def stats():
     wines = [w for w in all_wines() if w["stock"]]
     y = date.today().year
-    by_to, by_vintage, by_country = {}, {}, {}
+    by_peak_to, by_vintage, by_country, by_status = {}, {}, {}, {}
+    peak_years = {str(yr): 0 for yr in range(y, y + 16)}
     for w in wines:
-        k = w["drink_year_to"]
+        n = w["stock"]
+        k = w.get("peak_year_to")
         k = "unknown" if k is None else ("before " + str(y) if k < y else str(k))
-        by_to[k] = by_to.get(k, 0) + w["stock"]
-        by_vintage[str(w["vintage"] or "unknown")] = by_vintage.get(str(w["vintage"] or "unknown"), 0) + w["stock"]
-        by_country[w["country"] or "unknown"] = by_country.get(w["country"] or "unknown", 0) + w["stock"]
+        by_peak_to[k] = by_peak_to.get(k, 0) + n
+        st = wine_status(w, y)
+        by_status[st] = by_status.get(st, 0) + n
+        if w.get("peak_year_from") is not None:
+            for yr in range(max(y, w["peak_year_from"]), min(y + 15, w["peak_year_to"]) + 1):
+                peak_years[str(yr)] += n
+        by_vintage[str(w["vintage"] or "unknown")] = by_vintage.get(str(w["vintage"] or "unknown"), 0) + n
+        by_country[w["country"] or "unknown"] = by_country.get(w["country"] or "unknown", 0) + n
     flow = {}
     for r in db.con().execute("SELECT substr(date,1,4) y, SUM(CASE WHEN qty>0 THEN qty ELSE 0 END), "
                               "SUM(CASE WHEN qty<0 THEN -qty ELSE 0 END) FROM movement GROUP BY y ORDER BY y"):
         flow[r[0]] = {"in": r[1], "out": r[2]}
-    running, ultimo = 0, {}
+    running = 0
     for yr in sorted(flow):
         running += flow[yr]["in"] - flow[yr]["out"]
         flow[yr]["ultimo"] = running
     value = sum((w["list_price"] or w["purchase_price"] or 0) * w["stock"] for w in wines)
     cost = sum((w["purchase_price"] or 0) * w["stock"] for w in wines)
+    at_peak = sum(w["stock"] for w in wines if w.get("peak_year_from") is not None and w["peak_year_from"] <= y <= w["peak_year_to"])
+    past_peak = sum(w["stock"] for w in wines if w.get("peak_year_to") is not None and w["peak_year_to"] < y)
+    estimated = sum(w["stock"] for w in wines if w.get("peak_source") == "estimated")
     return {"bottles": sum(w["stock"] for w in wines), "wines": len(wines), "value": value, "cost": cost,
-            "by_drink_year_to": by_to, "by_vintage": by_vintage, "by_country": by_country, "flow": flow,
-            "year": y}
+            "at_peak": at_peak, "past_peak": past_peak, "peak_estimated": estimated,
+            "by_peak_year_to": by_peak_to, "peak_by_year": peak_years, "by_status": by_status,
+            "by_vintage": by_vintage, "by_country": by_country, "flow": flow, "year": y}
 
 
 # ---------------------------------------------------------------- Home Assistant sensors
@@ -172,6 +197,9 @@ def ha_push_loop():
                 "sensor.wine_cellar_bottles": (sum(w["stock"] for w in ws), "Wine cellar bottles", "mdi:bottle-wine"),
                 "sensor.wine_cellar_drink_this_year": (sum(w["stock"] for w in ws if w["drink_year_to"] and w["drink_year_to"] <= y),
                                                  "Wine cellar drink this year", "mdi:glass-wine"),
+                "sensor.wine_cellar_at_peak": (sum(w["stock"] for w in ws if w.get("peak_year_from") is not None
+                                                   and w["peak_year_from"] <= y <= w["peak_year_to"]),
+                                               "Wine cellar at peak", "mdi:star-circle"),
                 "sensor.wine_cellar_ready": (sum(w["stock"] for w in ws if w["drink_year_from"] and w["drink_year_from"] <= y <= (w["drink_year_to"] or 0)),
                                            "Wine cellar ready to drink", "mdi:glass-wine"),
             }

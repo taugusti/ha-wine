@@ -826,18 +826,27 @@ function bars(obj, opts = {}) {
 
 async function renderStats() {
   const s = await api("api/stats");
-  const yrSort = ([a], [b]) => (a.startsWith("before") ? -1 : b.startsWith("before") ? 1 : a.localeCompare(b));
+  const yrSort = ([a], [b]) => (a.startsWith("before") ? -1 : b.startsWith("before") ? 1 : a === "unknown" ? 1 : b === "unknown" ? -1 : a.localeCompare(b));
   const countries = {};
   Object.entries(s.by_country).forEach(([k, v]) => { const n = k[0].toUpperCase() + k.slice(1).toLowerCase(); countries[n] = (countries[n] || 0) + v; });
+  const order = ["over", "now", "peak", "ready", "young", "unknown"];
+  const status = {};
+  order.filter((k) => s.by_status[k]).forEach((k) => { status[STATUS[k]] = s.by_status[k]; });
+  const py = Object.entries(s.peak_by_year); while (py.length > 1 && !py[py.length - 1][1]) py.pop();  // drop empty years at the end
+  const stCls = Object.fromEntries(order.map((k) => [STATUS[k], `st-${k}`]));
   $("#tab-stats").innerHTML = `
     <div class="kpis">
-      <div class="kpi"><div class="v">${s.bottles}</div><div class="l">bottles in stock</div></div>
-      <div class="kpi"><div class="v">${s.wines}</div><div class="l">different wines</div></div>
-      <div class="kpi"><div class="v">${kr(s.value)}</div><div class="l">value (list price)</div></div>
-      <div class="kpi"><div class="v">${kr(s.cost)}</div><div class="l">purchase cost</div></div>
+      <div class="kpi"><div class="v">${s.bottles}</div><div class="l">bottles in stock (${s.wines} wines)</div></div>
+      <div class="kpi"><div class="v s-peak">${s.at_peak}</div><div class="l">bottles at peak now</div></div>
+      <div class="kpi"><div class="v ${s.past_peak ? "s-now" : ""}">${s.past_peak}</div><div class="l">bottles past their peak</div></div>
+      <div class="kpi"><div class="v">${kr(s.value)}</div><div class="l">value · ${kr(s.cost)} paid</div></div>
     </div>
+    ${s.peak_estimated ? `<p class="muted small">${s.peak_estimated} of ${s.bottles} bottles use an estimated peak (30–80 % into the drinking window) until a real peak is set.</p>` : ""}
     <div class="sgrid">
-      <div class="panel"><h2>Bottles by last drinking year</h2>${bars(s.by_drink_year_to, { sortKey: yrSort, cls: (k) => (k.startsWith("before") ? "past" : Number(k) === s.year ? "cur" : "") })}</div>
+      <div class="panel"><h2>Bottles at peak, by year</h2><p class="muted small">How many of today's bottles are in their peak each year.</p>
+        ${bars(Object.fromEntries(py), { sortKey: ([a], [b]) => a.localeCompare(b), cls: () => "st-peak" })}</div>
+      <div class="panel"><h2>Bottles by end of peak</h2>${bars(s.by_peak_year_to, { sortKey: yrSort, cls: (k) => (k.startsWith("before") ? "past" : Number(k) === s.year ? "cur" : "") })}</div>
+      <div class="panel"><h2>Bottles by status</h2>${bars(status, { sortKey: ([a], [b]) => order.indexOf(Object.keys(STATUS).find((k) => STATUS[k] === a)) - order.indexOf(Object.keys(STATUS).find((k) => STATUS[k] === b)), cls: (k) => stCls[k] })}</div>
       <div class="panel"><h2>Bottles by vintage</h2>${bars(s.by_vintage, { sortKey: ([a], [b]) => a.localeCompare(b) })}</div>
       <div class="panel"><h2>Bottles by country</h2>${bars(countries, { sortKey: ([, a], [, b]) => b - a })}</div>
       <div class="panel"><h2>In and out per year</h2>
