@@ -323,6 +323,11 @@ class H(BaseHTTPRequestHandler):
     def dispatch_ai(self, method, path):
         if path == "/api/ai/status":
             return self.send(200, {"entity": ai.ai_entity()})
+        if path == "/api/ai/client-log" and method == "POST":
+            # errors from the browser, so they can be read in the app log
+            d = self.json_body()
+            print("CLIENT", json.dumps(d, ensure_ascii=False)[:2000], flush=True)
+            return self.send(200, {"ok": True})
         if path == "/api/ai/recs":
             if method == "POST":
                 recommend.start(enrich)

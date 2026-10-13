@@ -6,6 +6,15 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const fold = (s) => String(s ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const kr = (n) => n == null ? "" : Math.round(n).toLocaleString("en-GB") + " DKK";
 const LOADED_VERSION = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([^&]+)/) || [])[1] || "";
+// report browser errors to the app log (Settings → Apps → Wine Cellar → Log)
+function clientLog(kind, msg, extra = {}) {
+  try {
+    fetch("api/ai/client-log", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, msg: String(msg).slice(0, 800), v: LOADED_VERSION, ua: navigator.userAgent, w: innerWidth, h: innerHeight, ...extra }) });
+  } catch { /* ignore */ }
+}
+window.addEventListener("error", (e) => clientLog("error", e.message, { src: `${e.filename}:${e.lineno}:${e.colno}`, stack: e.error?.stack?.slice(0, 800) }));
+window.addEventListener("unhandledrejection", (e) => clientLog("rejection", e.reason?.message || e.reason, { stack: e.reason?.stack?.slice(0, 800) }));
 const today = () => new Date().toISOString().slice(0, 10);
 
 const STATUS = {
@@ -896,8 +905,11 @@ function showTab(name) {
   $$(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   $$(".tab").forEach((t) => t.classList.toggle("on", t.id === "tab-" + name));
   save("tab", name);
-  const show = (fn, el) => fn().catch((e) => {   // never leave a tab blank: show what went wrong and offer a retry
-    console.error(e);
+  const show = (fn, el) => fn().then(() => {
+    const sec = $(el);
+    clientLog("tab", name, { len: sec.innerHTML.length, display: getComputedStyle(sec).display, h: sec.offsetHeight });
+  }).catch((e) => {   // never leave a tab blank: show what went wrong and offer a retry
+    console.error(e); clientLog("tab-error", e.message || String(e), { tab: name, stack: e.stack?.slice(0, 800) });
     $(el).innerHTML = `<div class="panel wide"><p class="err">Could not show this page: ${esc(e.message || String(e))}</p>
       <p class="small muted">App version ${esc(LOADED_VERSION || "?")}. If the app was just updated, reload the page.</p>
       <div class="row"><button class="btn primary" onclick="location.reload()">Reload</button></div></div>`;

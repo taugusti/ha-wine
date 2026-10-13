@@ -1,3 +1,6 @@
+# 1.16.3
+- Browser errors and tab rendering problems are written to the app log, to make problems easier to find.
+
 # 1.16.2
 - New wine glass icon: in the app header, as the browser icon and as the app icon in Home Assistant.
 
