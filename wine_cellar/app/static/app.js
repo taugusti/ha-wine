@@ -14,7 +14,8 @@ const TYPES = ["red", "white", "rosé", "sparkling", "dessert", "fortified"];
 const KIND = { in: "In", out: "Out", count: "Stock count" };
 
 let wines = [];
-let sort = load("sort", { k: "drink_year_to", dir: 1 });
+let sort = load("sort", { k: "peak_year_to", dir: 1 });
+if (sort.k === "drink_year_to") sort = { k: "peak_year_to", dir: 1 }; // default changed in 1.10
 let current = null; // wine shown in the drawer
 let aiEntity = null; // AI Task entity in Home Assistant, if any
 
@@ -81,6 +82,7 @@ function cmp(a, b) {
   if (!nx) r = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "en", { sensitivity: "base" });
   r *= sort.dir;
   if (r === 0 && k === "drink_year_to") r = (a.drink_year_from ?? 9999) - (b.drink_year_from ?? 9999);
+  if (r === 0 && k === "peak_year_to") r = (a.peak_year_from ?? 9999) - (b.peak_year_from ?? 9999) || (a.drink_year_to ?? 9999) - (b.drink_year_to ?? 9999);
   return r || a.description.localeCompare(b.description, "en");
 }
 
@@ -90,10 +92,10 @@ function winCell(w) {
   const lo = Y - 6, hi = Y + 20, pct = (v) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
   const l = pct(w.drink_year_from), r = pct(w.drink_year_to + 1);
   return `<div class="win s-${s}">
-    <div><span class="yrs">${w.drink_year_from}–${w.drink_year_to}</span><span class="chip">${STATUS[s]}</span></div>
-    <div class="bar" title="${w.peak_year_from != null ? `Peak ${w.peak_year_from}–${w.peak_year_to}` : ""}"><i style="left:${l}%;width:${Math.max(1, r - l)}%"></i>${w.peak_year_from != null
-      ? `<i class="pk" style="left:${pct(w.peak_year_from)}%;width:${Math.max(1, pct(w.peak_year_to + 1) - pct(w.peak_year_from))}%"></i>` : ""}<b style="left:${pct(Y + 0.5)}%"></b></div>
-    ${w.window_source !== "own" ? `<span class="src">${esc(w.window_source)}</span>` : ""}
+    <div><span class="yrs">${w.peak_year_from === w.peak_year_to ? w.peak_year_from : `${w.peak_year_from}–${w.peak_year_to}`}</span><span class="chip">${STATUS[s]}</span></div>
+    <div class="bar" title="Drink ${w.drink_year_from}–${w.drink_year_to}, peak ${w.peak_year_from}–${w.peak_year_to}"><i style="left:${l}%;width:${Math.max(1, r - l)}%"></i>${w.peak_year_from != null
+      ? `<i class="pk ${w.peak_source === "estimated" ? "est" : ""}" style="left:${pct(w.peak_year_from)}%;width:${Math.max(1, pct(w.peak_year_to + 1) - pct(w.peak_year_from))}%"></i>` : ""}<b style="left:${pct(Y + 0.5)}%"></b></div>
+    <span class="src">drink ${w.drink_year_from}–${w.drink_year_to}${w.window_source !== "own" ? ` (${esc(w.window_source)})` : ""}${w.peak_source === "estimated" ? " · peak estimated" : ""}</span>
   </div>`;
 }
 

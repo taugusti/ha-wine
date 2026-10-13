@@ -100,7 +100,10 @@ appellation norms it says so and marks the window as uncertain.
 missing, the **auto estimate** is used. It is rule-based on region/appellation, wine type, magnum and price
 (`app/estimate.py`).
 
-The default view is sorted by last drinking year, with the wines to drink first at the top.
+The wine list shows the **peak period** (the drinking window is shown in small text below) and is sorted by the
+end of the peak period, so the wines that are at their best now or soon come first. Wines without a peak get an
+estimated peak from their drinking window (about 30–80 % into the window), marked "peak estimated" and shown as a
+dashed band, until a real peak is set by **✨ Update with AI** or by hand.
 
 ## Barcodes
 

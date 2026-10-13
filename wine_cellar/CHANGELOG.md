@@ -1,3 +1,7 @@
+# 1.10.0
+- The wine list shows the peak period instead of the drinking window (the window is shown in small text below) and is sorted by the end of the peak period by default.
+- Wines without a peak get an estimated peak from their drinking window (about 30–80 % into the window), marked "peak estimated" and shown as a dashed band, until a real peak is set.
+
 # 1.9.0
 - Closing a wine with unsaved changes (or a new wine with data or photos) asks for confirmation.
 - Drinking windows are based on the specific wine: producer style and track record, the cuvée level, the vintage character and bottle size. "Window based on" explains what the window rests on.

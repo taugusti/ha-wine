@@ -67,9 +67,15 @@ def enrich(w, stock=None, last_move=None):
     if w.get("vintage"):
         w["drink_year_from"], w["drink_year_to"] = w["vintage"] + fa, w["vintage"] + ta
         if w.get("peak_from_age") is not None and w.get("peak_to_age") is not None:
-            w["peak_year_from"], w["peak_year_to"] = w["vintage"] + w["peak_from_age"], w["vintage"] + w["peak_to_age"]
+            pf, pt, w["peak_source"] = w["peak_from_age"], w["peak_to_age"], "own"
+        else:  # no peak yet: assume roughly the middle of the drinking window
+            span = ta - fa
+            pf, pt, w["peak_source"] = fa + round(span * 0.3), ta - round(span * 0.2), "estimated"
+            if pt < pf:
+                pf = pt = fa + span // 2
+        w["peak_year_from"], w["peak_year_to"] = w["vintage"] + pf, w["vintage"] + pt
     else:
-        w["drink_year_from"] = w["drink_year_to"] = None
+        w["drink_year_from"] = w["drink_year_to"] = w["peak_year_from"] = w["peak_year_to"] = None
     if stock is not None:
         w["stock"] = stock
     if last_move is not None:

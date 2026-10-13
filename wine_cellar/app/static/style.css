@@ -274,3 +274,4 @@ table.sugg th:nth-child(4) { width: 84px; }
 .s-peak { color: #2e7d6b; }
 @media (prefers-color-scheme: dark) { .s-peak { color: #6fd1b5; } }
 .bar i.pk { opacity: 1; background: currentColor; top: 1px; bottom: 1px; }
+.bar i.pk.est { opacity: .8; background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 6px); }
