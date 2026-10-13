@@ -1,3 +1,6 @@
+# 1.2.1
+- Critic links that only point to a front page are dropped, so the Search link is shown instead.
+
 # 1.2.0
 - Smart fill: paste invoice text and/or scan a barcode, and the wine is looked up with Home Assistant's AI Task
   (and Open Food Facts for the barcode). Suggestions are reviewed field by field before they are applied.

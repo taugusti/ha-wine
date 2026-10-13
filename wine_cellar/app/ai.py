@@ -159,7 +159,9 @@ def _clean(d):
             v = int(v)
         out[k] = v
     for k in ("rp_url", "ws_url", "js_url"):
-        if out.get(k) and not str(out[k]).startswith("http"):
+        u = out.get(k)
+        # drop non-links and links to a site's front page (not a specific review)
+        if u and (not str(u).startswith("http") or urllib.parse.urlparse(str(u)).path.strip("/") == ""):
             out[k] = None
     return out
 
