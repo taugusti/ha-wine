@@ -1,3 +1,6 @@
+# 1.15.1
+- Offers: a clear message when the Google AI quota is used up.
+
 # 1.15.0
 - New **Offers** tab: shows your peak gaps (years where fewer bottles are at peak than you drink in a year) and the styles you buy most. **Find offers** searches Danish wine shops for current offers in your top three styles with a peak in the gap years, sorted by how well they fill the gaps and by discount. "Add to cellar" opens a new wine with the details filled in.
 

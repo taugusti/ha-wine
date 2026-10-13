@@ -916,12 +916,13 @@ async function renderRecs() {
           : `<button class="btn primary" id="recsGo">🔎 Find offers</button>`}</div>
         ${st.status === "error" ? `<p class="err small">${esc(st.error)}</p>` : ""}
         ${last ? `<p class="small muted">Last search: ${esc(last.created)}${last.errors?.length ? ` · ${last.errors.length} searches failed` : ""}</p>` : ""}
+        ${last?.errors?.length && !recsOffers.length && last.errors.every((e) => /429|quota/i.test(e)) ? '<p class="warn small">The Google AI quota is used up for now, so the search could not run. The free quota resets daily; try again later.</p>' : ""}
         ${last?.errors?.length ? `<details class="small"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
       </div>
     </div>
     ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>
       <p class="small muted">Prices and offers come from a web search and can be outdated or wrong. Check the price at the shop before you buy.</p>`
-      : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}`;
+      : last.errors?.length ? "" : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}`;
   clearTimeout(recsTimer);
   if (run && $("#tab-recs").classList.contains("on")) recsTimer = setTimeout(renderRecs, 4000);
 }
