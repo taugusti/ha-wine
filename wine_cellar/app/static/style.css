@@ -186,9 +186,6 @@ table.sugg td:last-child { word-break: break-word; }
 .chipv { display: inline-flex; align-items: center; gap: 2px; background: var(--surface2); color: var(--text); border-radius: 99px;
   padding: 2px 4px 2px 10px; font-size: 14px; }
 .chipv button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 5px; }
-.scores { display: grid; grid-template-columns: minmax(130px, auto) 80px 1fr auto; gap: 8px 10px; align-items: center; font-size: 14px; }
-.scores .links { display: flex; gap: 10px; white-space: nowrap; }
-@media (max-width: 560px) { .scores { grid-template-columns: 1fr 80px; } .scores input[type=url] { grid-column: 1 / -1; } .scores .links { grid-column: 1 / -1; } }
 .score { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; margin-left: 6px; border-radius: 4px;
   background: var(--surface2); color: var(--accent); }
 h3.sm { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
@@ -275,3 +272,77 @@ table.sugg th:nth-child(4) { width: 84px; }
 @media (prefers-color-scheme: dark) { .s-peak { color: #6fd1b5; } }
 .bar i.pk { opacity: 1; background: currentColor; top: 1px; bottom: 1px; }
 .bar i.pk.est { opacity: .8; background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 6px); }
+
+/* 1.13: wine view - overview, collapsible edit, save bar, dialogs */
+.dhead .ttl { flex: 1; min-width: 0; }
+.dhead .ttl .sub { margin-top: 3px; }
+.dbody { gap: 12px; padding-bottom: 24px; }
+.drawer details.card > summary { cursor: pointer; list-style: none; display: flex; align-items: center; }
+.drawer details.card > summary::-webkit-details-marker { display: none; }
+.drawer details.card > summary h3 { margin: 0; flex: 1; }
+.drawer details.card > summary::after { content: "▸"; color: var(--muted); font-size: 13px; }
+.drawer details.card[open] > summary::after { content: "▾"; }
+.drawer details.card[open] > summary { margin-bottom: 12px; }
+.smart summary h3::after { content: none !important; }
+.ov { display: flex; flex-direction: column; gap: 12px; }
+.win.big { min-width: 0; gap: 6px; }
+.win.big .yrs { font: 600 24px/1.1 var(--serif); }
+.win.big .yrs::before { content: "Peak "; font: 13px var(--sans); color: var(--muted); }
+.win.big .bar { height: 8px; }
+.win.big .src { font-size: 12px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px 14px; margin: 0; }
+.facts div { min-width: 0; }
+.facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.facts dd { margin: 2px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.facts .score { margin: 0 6px 0 0; text-decoration: none; font-size: 12px; padding: 1px 7px; }
+.ovtext { border-top: 1px solid var(--line); padding-top: 10px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+.ovtext p { margin: 0; }
+.ovtext b { color: var(--muted); font-weight: 600; }
+.stockrow { gap: 10px; }
+.stockrow .bignum { margin-right: auto; }
+.stepper { display: inline-flex; align-items: stretch; }
+.stepper .btn { border-radius: 8px 0 0 8px; min-width: 38px; }
+.stepper .btn:last-child { border-radius: 0 8px 8px 0; }
+.stepper input[type=number] { width: 52px; text-align: center; border-radius: 0; border-left: 0; border-right: 0; -moz-appearance: textfield; }
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stockrow .btn[data-mv] { min-width: 64px; }
+details.more { margin-top: 10px; font-size: 13px; }
+details.more summary { cursor: pointer; color: var(--muted); }
+details.more .row { margin: 8px 0 0; }
+details.more label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+h3.sub3 { margin: 20px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+h3.sub3 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.grid .yr { color: var(--muted); font-variant-numeric: tabular-nums; }
+.g4 { grid-template-columns: repeat(4, 1fr); margin-bottom: 10px; }
+.est { margin: 4px 0 12px; font-size: 13px; }
+.scores { display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.crit { display: grid; grid-template-columns: 1fr 90px auto; gap: 6px 10px; align-items: center; }
+.crit input[type=url] { grid-column: 1 / -1; }
+.crit .links { display: flex; gap: 10px; white-space: nowrap; font-size: 13px; }
+.edit .foot { margin-top: 16px; }
+.savebar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 18px calc(10px + env(safe-area-inset-bottom));
+  background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -6px 20px rgba(40, 20, 30, .08); z-index: 3; }
+.savebar span { flex: 1; font-size: 14px; color: var(--now); font-weight: 600; }
+.ask { position: fixed; inset: 0; z-index: 40; background: rgba(20, 10, 15, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.askbox { background: var(--surface); border-radius: 14px; padding: 18px 20px; width: min(380px, 100%); box-shadow: var(--shadow); }
+.askbox h3 { margin: 0 0 6px; font: 600 19px var(--serif); }
+.askbox p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.askbtns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+@media (max-width: 560px) {
+  .dhead { padding: 10px 14px; }
+  .dhead h2 { font-size: 18px; }
+  .dbody { padding: 12px 12px 20px; }
+  .card { padding: 12px 14px; }
+  .grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .g4 { grid-template-columns: 1fr 1fr; }
+  .facts { grid-template-columns: 1fr 1fr; }
+  .moves li { grid-template-columns: 84px 36px 1fr auto; font-size: 13px; }
+  .stockrow { flex-wrap: nowrap; gap: 6px; }
+  .stockrow .bignum { font-size: 32px; min-width: 0; }
+  .stockrow .btn[data-mv] { min-width: 0; padding: 8px 12px; }
+  .stepper .btn { min-width: 34px; padding: 8px 6px; }
+  .stepper input[type=number] { width: 40px; padding: 4px 2px; }
+  .savebar { padding-left: 12px; padding-right: 12px; }
+  .askbtns { flex-direction: column-reverse; align-items: stretch; }
+  .askbtns .btn { min-height: 44px; }
+}

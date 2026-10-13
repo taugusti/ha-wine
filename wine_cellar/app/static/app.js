@@ -202,7 +202,9 @@ function scoreBadges(w) {
 // ------------------------------------------------------------- drawer (detail / edit)
 const SIZES = [[37.5, "37.5 cl (half)"], [50, "50 cl"], [75, "75 cl"], [150, "150 cl (magnum)"], [300, "300 cl (double magnum)"]];
 
-async function openWine(id, preset = {}) {
+let editOpen = false; // keep "Edit details" open when the wine is re-opened after saving
+async function openWine(id, preset = {}, keepScroll = 0) {
+  if (!id || Number(id) !== current?.id) editOpen = false;
   if (!aiEntity) { try { aiEntity = (await api("api/ai/status")).entity; } catch { /* AI not available */ } }
   const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "red", vintage: "", movements: [], stock: 0, size_cl: 75, ...preset };
   if (aiJob) aiCancel();
@@ -212,57 +214,59 @@ async function openWine(id, preset = {}) {
   const isNew = !id;
   const size = w.size_cl ?? 75;
   d.innerHTML = `
-    <div class="dhead">${w.photo ? `<a href="api/photo/${esc(w.photo)}" target="_blank" rel="noopener"><img class="lbl" src="api/photo/${esc(w.photo)}" alt="Label photo"></a>` : ""}<h2>${isNew ? "New wine" : esc(w.description)}</h2><button class="btn" data-close>Close</button></div>
+    <div class="dhead">${w.photo ? `<a href="api/photo/${esc(w.photo)}" target="_blank" rel="noopener"><img class="lbl" src="api/photo/${esc(w.photo)}" alt="Label photo"></a>` : ""}
+      <div class="ttl"><h2>${isNew ? "New wine" : esc(w.description)}</h2>${isNew ? "" : `<div class="sub" id="ovSub"></div>`}</div>
+      <button class="btn" data-close>Close</button></div>
     <div class="dbody">
-      ${isNew ? "" : `<div class="card">
-        <h3>Stock</h3>
+      ${isNew ? "" : `<div class="card ov" id="ov"></div>
+      <div class="card stockc">
         <div class="stockrow">
-          <div class="bignum">${w.stock}<small>bottles</small></div>
-          <div class="acts">
-            <input type="number" id="mvQty" value="1" min="0" aria-label="Quantity">
-            <button class="btn primary" data-mv="out">Out</button>
-            <button class="btn" data-mv="in">In</button>
-            <button class="btn" data-mv="count" title="Set the stock to the given quantity">Set stock to</button>
-            <input type="date" id="mvDate" value="${today()}" aria-label="Date">
-          </div>
+          <div class="bignum">${w.stock}<small>${w.stock === 1 ? "bottle" : "bottles"}</small></div>
+          <div class="stepper"><button type="button" class="btn icon" data-step="-1" aria-label="Fewer">−</button><input type="number" id="mvQty" value="1" min="0" inputmode="numeric" aria-label="Quantity"><button type="button" class="btn icon" data-step="1" aria-label="More">+</button></div>
+          <button class="btn primary" data-mv="out">Out</button>
+          <button class="btn" data-mv="in">In</button>
         </div>
+        <details class="more"><summary>Date, stock count</summary>
+          <div class="row"><label class="small">Date <input type="date" id="mvDate" value="${today()}"></label>
+          <button class="btn" data-mv="count" title="Set the stock to the given quantity">Set stock to quantity</button></div>
+        </details>
       </div>`}
 
-      ${!isNew && aiEntity ? `<button type="button" class="btn update-ai" id="aiUpdate">✨ Update with AI</button>` : ""}
+      ${aiEntity ? `${!isNew ? `<button type="button" class="btn update-ai" id="aiUpdate">✨ Update with AI</button>` : ""}
       <details class="card smart" ${isNew ? "open" : ""}>
-        <summary><h3>Smart fill${aiEntity ? "" : " (not available)"}</h3></summary>
-        ${aiEntity ? `
+        <summary><h3>Smart fill</h3></summary>
         <div class="photorow">
           <div class="pslot" id="slot-front"></div>
           <div class="pslot" id="slot-back"></div>
         </div>
-        <p class="muted small">Take a photo of the front label; the lookup starts by itself. Add the back label (grapes, barcode) and the lookup is updated. It uses ${esc(aiEntity)} in Home Assistant, plus a web search agent for prices and critic scores if you have one. Invoice text and barcode are optional extras${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
+        <p class="muted small">Take a photo of the front label; the lookup starts by itself. Add the back label (grapes, barcode) to improve it. Invoice text and barcode are optional${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
         <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
         <div class="row">
           <input type="text" id="aiBarcode" placeholder="Barcode" value="${esc(w.barcode ?? "")}">
           <button type="button" class="btn primary" id="aiGo">Look up</button>
           <span class="muted small" id="aiStatus"></span>
         </div>
-        <div id="aiResult"></div>` : `<p class="muted small">No AI Task entity was found in Home Assistant. Add an AI integration with an AI Task (e.g. Google Gemini), or set <code>ai_task_entity</code> in the app configuration.</p>`}
-      </details>
+        <div id="aiResult"></div>
+      </details>` : ""}
 
-      <form id="wf" class="card" autocomplete="off">
-        <h3>Wine</h3>
+      <details class="card edit" id="editSec" ${isNew || editOpen ? "open" : ""}>
+      <summary><h3>${isNew ? "Wine" : "Edit details"}</h3></summary>
+      <form id="wf" autocomplete="off">
         <div class="grid">
           ${field("description", "Description", w, "text", "wide")}
-          ${field("producer", "Producer", w, "text", "", "dl-producer")}
+          ${field("producer", "Producer", w, "text", "wide", "dl-producer")}
           ${field("vintage", "Vintage", w, "number")}
-          ${countrySelect(w.country)}
-          ${field("region", "Region (broad → narrow, comma-separated)", w, "text", "", "dl-region")}
-          ${grapeChips(w.grapes)}
           <label>Type<select name="wine_type">${TYPES.map((t) => `<option ${t === (w.wine_type || "red") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+          ${countrySelect(w.country)}
           <label>Bottle size<select name="size_cl">${SIZES.map(([v, l]) => `<option value="${v}" ${Number(size) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-          ${field("purchase_price", "Actual purchase price (DKK, 1 bottle)", w, "number")}
-          ${field("list_price", "Estimated price (DKK, 1 bottle)", w, "number")}
+          ${field("region", "Region (broad → narrow)", w, "text", "wide", "dl-region")}
+          ${grapeChips(w.grapes)}
+          ${field("purchase_price", "Paid (DKK/bottle)", w, "number")}
+          ${field("list_price", "Est. price (DKK)", w, "number")}
           ${field("shop", "Shop", w, "text", "", "dl-shop")}
-          ${field("location", "Location in cellar", w)}
-          <label>Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
-          ${isNew ? field("initial_qty", "Bottles in stock at creation", w, "number") : "<span></span>"}
+          ${field("location", "Location", w)}
+          <label class="wide">Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}" inputmode="numeric"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
+          ${isNew ? field("initial_qty", "Bottles in stock", w, "number") : ""}
           ${field("link", "Link", w, "url", "wide")}
           <input type="hidden" name="photo" value="${esc(w.photo ?? "")}">
           <label class="wide">About the wine<textarea name="info">${esc(w.info ?? "")}</textarea></label>
@@ -274,51 +278,97 @@ async function openWine(id, preset = {}) {
         <datalist id="dl-region"></datalist>
       </form>
 
-      <div class="card">
-        <h3>Drinking window</h3>
-        <div class="grid" style="margin-bottom:12px">
-          <label>Drink from (years after vintage)<input form="wf" type="number" name="drink_from_age" value="${esc(w.drink_from_age ?? "")}"></label>
-          <label>Drink until (years after vintage)<input form="wf" type="number" name="drink_to_age" value="${esc(w.drink_to_age ?? "")}"></label>
-          <label>Peak from (years after vintage)<input form="wf" type="number" name="peak_from_age" value="${esc(w.peak_from_age ?? "")}"></label>
-          <label>Peak until (years after vintage)<input form="wf" type="number" name="peak_to_age" value="${esc(w.peak_to_age ?? "")}"></label>
+        <h3 class="sub3">Drinking window <span class="muted">· years after vintage</span></h3>
+        <div class="grid g4">
+          ${[["drink_from_age", "Drink from"], ["drink_to_age", "Drink until"], ["peak_from_age", "Peak from"], ["peak_to_age", "Peak until"]].map(([k, l]) =>
+            `<label><span>${l} <span class="yr" data-yr="${k}"></span></span><input form="wf" type="number" inputmode="numeric" name="${k}" value="${esc(w[k] ?? "")}"></label>`).join("")}
         </div>
         <div class="est" id="estBox"></div>
-        <div class="grid" style="margin-top:12px">
+        <div class="grid">
           <label class="wide">Window based on<textarea form="wf" name="window_basis">${esc(w.window_basis ?? "")}</textarea></label>
           <label class="wide">Drinking advice<textarea form="wf" name="advice">${esc(w.advice ?? "")}</textarea></label>
           <label class="wide">Serving<textarea form="wf" name="serving">${esc(w.serving ?? "")}</textarea></label>
         </div>
-      </div>
 
-      <div class="card">
-        <h3>Critic scores</h3>
+        <h3 class="sub3">Critic scores</h3>
         <div class="scores">
-          ${CRITICS.map((c) => `<span class="cname">${c.name}</span>
+          ${CRITICS.map((c) => `<div class="crit"><span class="cname">${c.name}</span>
             <input form="wf" type="text" name="${c.k}_score" value="${esc(w[`${c.k}_score`] ?? "")}" placeholder="Score" aria-label="${c.name} score">
-            <input form="wf" type="url" name="${c.k}_url" value="${esc(w[`${c.k}_url`] ?? "")}" placeholder="Link to review" aria-label="${c.name} link">
-            <span class="links"><a id="open-${c.k}" target="_blank" rel="noopener" hidden>Open</a><a id="srch-${c.k}" target="_blank" rel="noopener">Search</a></span>`).join("")}
+            <span class="links"><a id="open-${c.k}" target="_blank" rel="noopener" hidden>Open</a><a id="srch-${c.k}" target="_blank" rel="noopener">Search</a></span>
+            <input form="wf" type="url" name="${c.k}_url" value="${esc(w[`${c.k}_url`] ?? "")}" placeholder="Link to review" aria-label="${c.name} link"></div>`).join("")}
         </div>
-        <p class="muted small">Scores suggested by the AI are only filled in when it knows a published score. Check them with the link. <a id="srch-wsr" target="_blank" rel="noopener">Find on Wine-Searcher</a></p>
-      </div>
+        <p class="muted small">AI scores are only filled in when a published score is known. <a id="srch-wsr" target="_blank" rel="noopener">Find on Wine-Searcher</a></p>
 
-      <div class="foot">
-        <button class="btn primary" id="saveW">${isNew ? "Create wine" : "Save changes"}</button>
-        ${isNew ? "" : `<button class="btn danger" id="delW">Delete wine</button>`}
-      </div>
+        <div class="foot">
+          <button class="btn primary" id="saveW">${isNew ? "Create wine" : "Save changes"}</button>
+          ${isNew ? "" : `<button class="btn danger" id="delW">Delete wine</button>`}
+        </div>
+      </details>
 
-      ${isNew ? "" : `<div class="card"><h3>Movements</h3>
+      ${isNew ? "" : `<details class="card"><summary><h3>Movements <span class="muted">(${w.movements.length})</span></h3></summary>
         <ul class="moves">${w.movements.map((m) => `<li>
           <span>${esc(m.date)}</span>
           <span class="q">${m.qty > 0 ? "+" : ""}${m.qty}</span>
           <span>${KIND[m.kind] || m.kind}${m.kind === "count" ? ` (${m.count_value} bottles)` : ""}${m.note ? " · " + esc(m.note) : ""}${m.source === "excel" ? '<span class="tag">Excel</span>' : ""}</span>
           <button class="x" data-delmv="${m.id}" title="Delete movement">✕</button>
-        </li>`).join("") || '<li class="muted">No movements yet.</li>'}</ul></div>`}
-    </div>`;
+        </li>`).join("") || '<li class="muted">No movements yet.</li>'}</ul></details>`}
+    </div>
+    <div class="savebar" id="saveBar" hidden><span>Unsaved changes</span>
+      <button type="button" class="btn" id="discardW">Discard</button>
+      <button type="button" class="btn primary" id="saveW2">${isNew ? "Create wine" : "Save"}</button></div>`;
+
   d.classList.add("open"); d.setAttribute("aria-hidden", "false"); $("#scrim").hidden = false;
   renderChips(); updateRegionList(); scoreLinks(); renderEst(); if (aiEntity) renderThumbs();
-  snapshotForm();
+  if (!isNew) renderOverview();
+  snapshotForm(); updateDirty();
+  if (keepScroll) d.scrollTop = keepScroll;
   $("#wf").addEventListener("submit", (e) => e.preventDefault());
   if (isNew && preset.barcode) $("#aiText")?.focus();
+}
+
+function renderOverview() {
+  const el = $("#ov"); if (!el || !current?.id) return;
+  const w = { ...current, ...(wines.find((x) => x.id === current.id) || {}) };
+  const sub = [w.producer, w.region, w.country].filter(Boolean).map(esc).join(" · ");
+  if ($("#ovSub")) $("#ovSub").innerHTML = sub;
+  const fact = (l, v) => (v === "" || v == null ? "" : `<div><dt>${l}</dt><dd>${v}</dd></div>`);
+  const price = [w.purchase_price != null ? `${kr(w.purchase_price)} paid` : "", w.list_price != null && w.list_price !== w.purchase_price ? `${kr(w.list_price)} est.` : ""].filter(Boolean).join(" · ");
+  const scores = CRITICS.filter((c) => w[`${c.k}_score`]).map((c) => {
+    const u = w[`${c.k}_url`];
+    return /^https?:/.test(u || "") ? `<a class="score" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(c.name)}">${c.k.toUpperCase()} ${esc(w[`${c.k}_score`])}</a>`
+      : `<span class="score" title="${esc(c.name)}">${c.k.toUpperCase()} ${esc(w[`${c.k}_score`])}</span>`;
+  }).join("");
+  const size = w.size_cl && Number(w.size_cl) !== 75 ? ` · ${w.size_cl} cl` : "";
+  const txt = (l, v) => (v ? `<p><b>${l}</b> ${esc(v)}</p>` : "");
+  el.innerHTML = `${winCell(w).replace('class="win', 'class="win big')}
+    <dl class="facts">
+      ${fact("Vintage", w.vintage ?? "")}${fact("Type", esc(w.wine_type || "") + size)}
+      ${fact("Grapes", esc(w.grapes || ""))}${fact("Price", price)}
+      ${fact("Shop", esc(w.shop || ""))}${fact("Location", esc(w.location || ""))}
+      ${scores ? fact("Scores", scores) : ""}
+      ${w.link ? fact("Link", `<a href="${esc(w.link)}" target="_blank" rel="noopener">${esc(new URL(w.link, location.href).hostname.replace(/^www\./, ""))}</a>`) : ""}
+    </dl>
+    ${w.info || w.advice || w.serving || w.window_basis || w.note ? `<div class="ovtext">${txt("About:", w.info)}${txt("Drinking:", w.advice)}${txt("Serving:", w.serving)}${txt("Window:", w.window_basis)}${txt("Notes:", w.note)}</div>` : ""}`;
+}
+
+function updateDirty() {
+  const bar = $("#saveBar"); if (!bar) return;
+  bar.hidden = !isDirty();
+}
+
+// small dialog with choices; resolves with the chosen value (or null when dismissed)
+function askChoice(title, text, choices) {
+  return new Promise((resolve) => {
+    const dlg = $("#ask");
+    dlg.innerHTML = `<div class="askbox" role="dialog" aria-modal="true"><h3>${esc(title)}</h3><p>${esc(text)}</p>
+      <div class="askbtns">${choices.map((c, i) => `<button type="button" class="btn ${c.cls || ""}" data-i="${i}">${esc(c.label)}</button>`).join("")}</div></div>`;
+    dlg.hidden = false;
+    const done = (v) => { dlg.hidden = true; dlg.innerHTML = ""; dlg.onclick = null; document.removeEventListener("keydown", esc_); resolve(v); };
+    const esc_ = (e) => { if (e.key === "Escape") { e.stopPropagation(); done(null); } };
+    document.addEventListener("keydown", esc_, true);
+    dlg.onclick = (e) => { const b = e.target.closest("button[data-i]"); if (b) done(choices[b.dataset.i].value); else if (e.target === dlg) done(null); };
+    $("button.primary", dlg)?.focus();
+  });
 }
 
 function formData() {
@@ -332,6 +382,7 @@ async function renderEst() {
   const f = formData();
   const vint = parseInt(f.vintage, 10);
   const yr = (a) => (Number.isFinite(vint) && a !== "" && a != null ? vint + Number(a) : null);
+  $$("#drawer [data-yr]").forEach((sp) => { const v = yr(f[sp.dataset.yr]); sp.textContent = v != null ? `(${v})` : ""; });
   let est;
   try { est = await send("api/estimate", "POST", f); } catch { return; }
   const own = f.drink_from_age !== "" && f.drink_to_age !== "";
@@ -568,7 +619,7 @@ async function decideRows(keys, accept) {
       const f = formData(), body = {};
       keys.filter((k) => k !== "quantity").forEach((k) => { body[k] = f[k]; });
       try { await send(`api/wines/${current.id}`, "PUT", body); Object.assign(current, body);
-        const snap = JSON.parse(formSnapshot || "{}"); Object.assign(snap, body); formSnapshot = JSON.stringify(snap); toast(keys.length > 1 ? "Saved" : "Saved"); refresh(); }
+        const snap = JSON.parse(formSnapshot || "{}"); Object.assign(snap, body); formSnapshot = JSON.stringify(snap); toast("Saved"); refresh().then(renderOverview); }
       catch (e) { toast("Error: " + e.message); return; }
     }
     renderEst(); scoreLinks();
@@ -588,29 +639,45 @@ function isDirty() {
   if (!current.id && (aiPhotos.front || aiPhotos.back)) return true;
   return JSON.stringify(formData()) !== formSnapshot;
 }
-function requestClose() {
-  if (isDirty() && !confirm(current.id ? "You have unsaved changes. Close without saving?" : "This new wine has not been saved. Close and discard it?")) return;
+async function requestClose() {
+  if (askOpen()) return;
+  if (isDirty()) {
+    const c = await askChoice(current.id ? "Save changes?" : "Save the new wine?",
+      current.id ? "You have changed this wine." : "This new wine has not been saved yet.",
+      [{ label: current.id ? "Save" : "Create wine", value: "save", cls: "primary" }, { label: "Discard", value: "discard", cls: "danger" },
+       { label: "Keep editing", value: null }]);
+    if (!c) return;
+    if (c === "save") { if (await saveWine({ close: true })) closeDrawer(); return; }
+  }
   closeDrawer();
 }
+const askOpen = () => !$("#ask").hidden;
 
 function closeDrawer() {
   if (aiJob) aiCancel();
   const d = $("#drawer"); d.classList.remove("open"); d.setAttribute("aria-hidden", "true"); $("#scrim").hidden = true; current = null;
 }
 
-async function saveWine() {
+async function saveWine(opt = {}) {
   const g = $("#grapeIn"); if (g && g.value.trim()) { addGrape(g.value); g.value = ""; }
   const f = formData();
-  if (!f.description.trim()) { toast("Description is required"); return; }
+  if (!f.description.trim()) { toast("Description is required"); const e = $("#editSec"); if (e) e.open = true; return false; }
   if (!current.id) {
     const dup = wines.find((w) => fold(w.description).replace(/[^a-z0-9]/g, "") === fold(f.description).replace(/[^a-z0-9]/g, "")
       || (f.barcode && w.barcode === f.barcode.trim()));
-    if (dup && !confirm(`"${dup.description}" already exists (${dup.stock} in stock). Create a new wine anyway?`)) return;
+    if (dup && !confirm(`"${dup.description}" already exists (${dup.stock} in stock). Create a new wine anyway?`)) return false;
   }
   try {
-    if (current.id) { await send(`api/wines/${current.id}`, "PUT", f); toast("Saved"); await refresh(); openWine(current.id); }
-    else { const r = await send("api/wines", "POST", f); toast("Wine created"); await refresh(); openWine(r.id); }
-  } catch (e) { toast("Error: " + e.message); }
+    const scroll = $("#drawer").scrollTop;
+    if (current.id) {
+      await send(`api/wines/${current.id}`, "PUT", f); toast("Saved"); await refresh();
+      if (!opt.close) openWine(current.id, {}, scroll);
+    } else {
+      const r = await send("api/wines", "POST", f); toast("Wine created"); await refresh();
+      if (!opt.close) openWine(r.id);
+    }
+    return true;
+  } catch (e) { toast("Error: " + e.message); return false; }
 }
 
 async function move(kind) {
@@ -619,14 +686,22 @@ async function move(kind) {
   try {
     const r = await send("api/movements", "POST", { wine_id: current.id, kind, qty: n, count: n, date: $("#mvDate").value });
     toast(`${KIND[kind]} recorded, stock: ${r.stock}`);
-    await refresh(); openWine(current.id);
+    await refresh(); reopenKeepingEdits();
   } catch (e) { toast("Error: " + e.message); }
+}
+// after a stock change: re-open the wine, unless the form has unsaved edits (then only update the numbers)
+function reopenKeepingEdits() {
+  if (!isDirty()) { openWine(current.id, {}, $("#drawer").scrollTop); return; }
+  const w = wines.find((x) => x.id === current.id);
+  if (w) { $("#drawer .bignum").firstChild.textContent = w.stock; current.stock = w.stock; renderOverview(); }
 }
 
 $("#drawer").addEventListener("click", async (e) => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.matches("[data-close]")) requestClose();
-  else if (t.id === "saveW") saveWine();
+  else if (t.id === "saveW" || t.id === "saveW2") saveWine();
+  else if (t.id === "discardW") { if (current.id) openWine(current.id, {}, $("#drawer").scrollTop); else closeDrawer(); }
+  else if (t.dataset.step) { const q = $("#mvQty"); q.value = Math.max(0, (parseInt(q.value, 10) || 0) + Number(t.dataset.step)); }
   else if (t.id === "aiGo") aiLookup();
   else if (t.dataset.shoot) openPhotoCamera(t.dataset.shoot);
   else if (t.dataset.rmphoto) { aiPhotos[t.dataset.rmphoto] = null; renderThumbs(); }
@@ -636,7 +711,11 @@ $("#drawer").addEventListener("click", async (e) => {
   else if (t.dataset.acc1) decideRows([t.dataset.acc1], true);
   else if (t.dataset.rej1) decideRows([t.dataset.rej1], false);
   else if (t.id === "aiUpdate") { const sm = $("#drawer .smart"); if (sm) { sm.open = true; sm.scrollIntoView({ behavior: "smooth" }); } aiLookup(); }
-  else if (t.dataset.openwine) { if (!isDirty() || confirm("This new wine has not been saved. Open the existing wine and discard it?")) openWine(t.dataset.openwine); }
+  else if (t.dataset.openwine) {
+    if (isDirty() && !(await askChoice("Discard this new wine?", "It has not been saved. Open the existing wine instead?",
+      [{ label: "Open existing wine", value: true, cls: "primary" }, { label: "Keep editing", value: null }]))) return;
+    openWine(t.dataset.openwine);
+  }
   else if (t.dataset.mv) move(t.dataset.mv);
   else if (t.dataset.rmgrape != null) {
     const h = $('#drawer [name="grapes"]');
@@ -649,7 +728,7 @@ $("#drawer").addEventListener("click", async (e) => {
     $('[name="barcode"]').value = (await api("api/next-barcode")).barcode;
   } else if (t.dataset.delmv) {
     if (!confirm("Delete this movement?")) return;
-    await api(`api/movements/${t.dataset.delmv}`, { method: "DELETE" }); await refresh(); openWine(current.id);
+    await api(`api/movements/${t.dataset.delmv}`, { method: "DELETE" }); await refresh(); reopenKeepingEdits();
   } else if (t.id === "delW") {
     if (!confirm(`Delete "${current.description}" and all its movements?`)) return;
     await api(`api/wines/${current.id}`, { method: "DELETE" }); closeDrawer(); toast("Wine deleted"); refresh();
@@ -675,12 +754,14 @@ $("#drawer").addEventListener("keydown", (e) => {
     h.value = vals.join(", "); renderChips();
   }
 });
+for (const ev of ["input", "change", "click"]) $("#drawer").addEventListener(ev, () => { if (current) setTimeout(updateDirty, 0); });
+$("#drawer").addEventListener("toggle", (e) => { if (e.target.id === "editSec") editOpen = e.target.open; }, true);
 $("#drawer").addEventListener("input", (e) => {
   if (!e.target.name || !current) return;
   clearTimeout(renderEst.t); renderEst.t = setTimeout(() => { renderEst(); scoreLinks(); }, 300);
 });
 $("#scrim").addEventListener("click", () => requestClose());
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && $("#pcam").hidden) requestClose(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && $("#pcam").hidden && !askOpen()) requestClose(); });
 
 // ------------------------------------------------------------- search, sort, scan
 $("#tbl thead").addEventListener("click", (e) => {
