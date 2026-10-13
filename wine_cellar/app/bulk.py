@@ -48,7 +48,9 @@ def candidates(con, only_missing=True):
     out = [dict(r) for r in rows]
     if only_missing:
         out = [w for w in out if w.get("peak_from_age") is None or w.get("peak_to_age") is None]
-    return out
+    # wines that already got a peak suggestion (pending or decided) are not looked up again, so a run can resume
+    done = {r[0] for r in con.execute("SELECT wine_id FROM proposal WHERE topic=? AND changes LIKE '%peak_from_age%'", (TOPIC,))}
+    return [w for w in out if w["id"] not in done]
 
 
 def build_changes(wine, s):
@@ -64,8 +66,12 @@ def build_changes(wine, s):
         ch.pop("drink_to_age", None)
         nf, nt = cf, ct
     if nf is not None and nt is not None:
+        if nt - nf < 2:
+            return None  # a window of a year or less is not plausible for a wine worth cellaring
         ch["peak_from_age"] = max(nf, min(ch["peak_from_age"], nt))
         ch["peak_to_age"] = max(ch["peak_from_age"], min(ch["peak_to_age"], nt))
+        if ch["peak_to_age"] - ch["peak_from_age"] >= nt - nf:
+            return None  # a "peak" covering the whole window says nothing
     return ch
 
 

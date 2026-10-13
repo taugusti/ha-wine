@@ -1,3 +1,6 @@
+# 1.11.1
+- AI review: resumes where it stopped after a restart; ignores one-year "windows" and peaks that cover the whole drinking window.
+
 # 1.11.0
 - New "✨ AI review of the cellar" on the Review page: looks up all wines in stock without a peak in the background and adds drinking window and peak suggestions for review (and fills empty critic scores). Shows progress, can be stopped, and waits and retries when the AI quota is used up.
 

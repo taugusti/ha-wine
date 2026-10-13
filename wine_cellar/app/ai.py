@@ -186,8 +186,8 @@ def merge_windows(s, windows, found):
             f, t = int(w.get("from_year")), int(w.get("to_year"))
         except (TypeError, ValueError):
             continue
-        if not vint or not (vint <= f <= t <= vint + 60):
-            continue
+        if not vint or not (vint <= f <= t <= vint + 60) or t - f < 2:
+            continue  # outside the wine's life, or a single year (usually a "drink now" note, not a window)
         good.append((w, f, t))
         if str(w.get("url", "")).startswith("http"):
             found["sources"].append({"label": f"{w.get('source') or 'Window'}: {f}–{t}", "url": w["url"]})
