@@ -1,10 +1,12 @@
-"""Import fra den gamle Excel-vindatabase (.xlsm/.xlsx).
+"""Import from the legacy Excel wine database (.xlsm/.xlsx).
 
-Kan køres igen og igen:
-- Vine matches på stregkode (ellers beskrivelse + årgang) og opdateres.
-  Felter, der kun findes i appen (vintype, placering), bevares.
-- Alle bevægelser med kilde 'excel' erstattes af arkets Lager-fane.
-  Bevægelser oprettet i appen bevares, medmindre drop_app=True.
+Safe to run repeatedly:
+- Wines are matched on barcode (otherwise description + vintage) and updated.
+  Fields that only exist in the app (wine type, location) are preserved.
+- All movements with source 'excel' are replaced by the workbook's 'Lager' sheet.
+  Movements created in the app are kept unless drop_app=True.
+
+Note: the workbook's sheet and column names are Danish and are matched as-is.
 """
 import io
 import re
@@ -21,8 +23,8 @@ HEADER_MAP = {
     "drink age to": "drink_to_age", "druer": "grapes", "anskaffelsespris": "purchase_price",
     "listepris": "list_price", "barcode": "barcode", "vinhandel": "shop", "note": "note", "link": "link",
 }
-# Kolonne U-AA (Drink from/to (years after vintage), drinking year from/to, Drinking advice,
-# rationale, advice2) importeres bevidst ikke.
+# Columns U-AA (Drink from/to (years after vintage), drinking year from/to, Drinking advice,
+# rationale, advice2) are intentionally not imported.
 EXCEL_OWNED = ["barcode", "description", "vintage", "country", "producer", "region", "grapes", "drink_from_age",
                "drink_to_age", "purchase_price", "list_price", "shop", "note", "link"]
 
@@ -70,7 +72,7 @@ def to_float(v):
 def read_workbook(data):
     wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
     if "Vin" not in wb.sheetnames or "Lager" not in wb.sheetnames:
-        raise ValueError("Filen skal have fanerne 'Vin' og 'Lager'.")
+        raise ValueError("The workbook must contain the sheets 'Vin' and 'Lager'.")
     rows = list(wb["Vin"].iter_rows(values_only=True))
     header = [str(h).strip().lower() if h is not None else "" for h in rows[0]]
     idx = {}
@@ -78,7 +80,7 @@ def read_workbook(data):
         if h in HEADER_MAP and HEADER_MAP[h] not in idx:
             idx[HEADER_MAP[h]] = i
     if "description" not in idx:
-        raise ValueError("Kunne ikke finde kolonnen 'Beskrivelse' i fanen Vin.")
+        raise ValueError("Could not find the column 'Beskrivelse' in the 'Vin' sheet.")
     wines = []
     for r in rows[1:]:
         g = lambda k: r[idx[k]] if k in idx and idx[k] < len(r) else None  # noqa: E731
@@ -132,7 +134,7 @@ def assign_keys(wines):
             w["import_key"] = f"bc:{w['barcode']}:{w['vintage']}:{norm(w['description'])}"
         else:
             w["import_key"] = f"d:{norm(w['description'])}:{w['vintage']}"
-    # sidste udvej: gør dubletter unikke
+    # last resort: make duplicate keys unique
     seen = Counter()
     for w in wines:
         seen[w["import_key"]] += 1
@@ -155,7 +157,7 @@ def run_import(con, data, dry_run=False, drop_app=False):
         for w in wines:
             row = con.execute("SELECT * FROM wine WHERE import_key=?", (w["import_key"],)).fetchone()
             if row is None and w["barcode"] and bc_count[w["barcode"]] == 1:
-                # vin oprettet i appen med samme stregkode -> knyt sammen
+                # wine created in the app with the same barcode -> link them
                 row = con.execute("SELECT * FROM wine WHERE barcode=? AND import_key IS NULL", (w["barcode"],)).fetchone()
             if row is None:
                 cols = EXCEL_OWNED + ["import_key", "created_at", "updated_at"]
@@ -179,7 +181,7 @@ def run_import(con, data, dry_run=False, drop_app=False):
             if r["import_key"] not in keys:
                 summary["wines_not_in_file"].append(r["description"])
 
-        # bevægelser
+        # movements
         con.execute("DELETE FROM movement WHERE source='excel'")
         if drop_app:
             summary["app_moves_deleted"] = con.execute("DELETE FROM movement WHERE source='app'").rowcount
@@ -188,7 +190,7 @@ def run_import(con, data, dry_run=False, drop_app=False):
         for w in wines:
             if w["barcode"] and bc_count[w["barcode"]] == 1:
                 bc_to_id[w["barcode"]] = key_to_id[w["import_key"]]
-        # vine oprettet i appen (uden import_key) kan også modtage bevægelser
+        # wines created in the app (no import_key) can also receive movements
         for r in con.execute("SELECT id, barcode FROM wine WHERE import_key IS NULL AND barcode IS NOT NULL"):
             bc_to_id.setdefault(r["barcode"], r["id"])
         orphans = set()
@@ -203,7 +205,7 @@ def run_import(con, data, dry_run=False, drop_app=False):
             summary["moves_imported"] += 1
         summary["orphan_barcodes"] = sorted(orphans)
 
-        # kontrol: lagertal i appen vs. Excel-kolonnen 'Lager'
+        # check: stock in the app vs. the Excel column 'Lager'
         for w in wines:
             if w["_excel_stock"] is None:
                 continue

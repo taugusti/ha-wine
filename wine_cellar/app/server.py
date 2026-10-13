@@ -1,6 +1,6 @@
-"""Vinkælder — lille webserver til Home Assistant (ingress).
+"""Wine Cellar - small web server for Home Assistant (ingress).
 
-Kun Python-standardbibliotek + openpyxl (til Excel-import).
+Python standard library only, plus openpyxl for the Excel import.
 """
 import csv
 import io
@@ -22,8 +22,8 @@ from estimate import estimate
 from importer import run_import
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-PORT = int(os.environ.get("VIN_PORT", "8099"))
-OWN_PREFIX = os.environ.get("VIN_BARCODE_PREFIX", "999888777")
+PORT = int(os.environ.get("WINE_PORT", "8099"))
+OWN_PREFIX = os.environ.get("WINE_BARCODE_PREFIX", "999888777")
 INT_FIELDS = {"vintage", "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "archived"}
 FLOAT_FIELDS = {"purchase_price", "list_price"}
 
@@ -40,14 +40,14 @@ def coerce(field, v):
 
 
 def enrich(w, stock=None, last_move=None):
-    """Tilføj beregnede felter: estimat, effektivt drikkevindue, lager."""
+    """Add computed fields: estimate, effective drinking window, stock."""
     w = dict(w)
     est = estimate(w)
     w["est_from"], w["est_to"], w["est_advice"], w["est_rationale"] = est["from"], est["to"], est["advice"], est["rationale"]
     if w.get("drink_from_age") is not None and w.get("drink_to_age") is not None:
-        fa, ta, src = w["drink_from_age"], w["drink_to_age"], "egen"
+        fa, ta, src = w["drink_from_age"], w["drink_to_age"], "own"
     else:
-        fa, ta, src = est["from"], est["to"], "auto-estimat"
+        fa, ta, src = est["from"], est["to"], "auto estimate"
     w["window_source"] = src
     if w.get("vintage"):
         w["drink_year_from"], w["drink_year_to"] = w["vintage"] + fa, w["vintage"] + ta
@@ -108,10 +108,10 @@ def stats():
     by_to, by_vintage, by_country = {}, {}, {}
     for w in wines:
         k = w["drink_year_to"]
-        k = "ukendt" if k is None else ("før " + str(y) if k < y else str(k))
+        k = "unknown" if k is None else ("before " + str(y) if k < y else str(k))
         by_to[k] = by_to.get(k, 0) + w["stock"]
-        by_vintage[str(w["vintage"] or "ukendt")] = by_vintage.get(str(w["vintage"] or "ukendt"), 0) + w["stock"]
-        by_country[w["country"] or "ukendt"] = by_country.get(w["country"] or "ukendt", 0) + w["stock"]
+        by_vintage[str(w["vintage"] or "unknown")] = by_vintage.get(str(w["vintage"] or "unknown"), 0) + w["stock"]
+        by_country[w["country"] or "unknown"] = by_country.get(w["country"] or "unknown", 0) + w["stock"]
     flow = {}
     for r in db.con().execute("SELECT substr(date,1,4) y, SUM(CASE WHEN qty>0 THEN qty ELSE 0 END), "
                               "SUM(CASE WHEN qty<0 THEN -qty ELSE 0 END) FROM movement GROUP BY y ORDER BY y"):
@@ -127,7 +127,7 @@ def stats():
             "year": y}
 
 
-# ---------------------------------------------------------------- Home Assistant sensorer
+# ---------------------------------------------------------------- Home Assistant sensors
 _ha_dirty = threading.Event()
 
 
@@ -145,20 +145,20 @@ def ha_push_loop():
             y = date.today().year
             ws = [w for w in all_wines() if w["stock"] > 0]
             vals = {
-                "sensor.vinkaelder_flasker": (sum(w["stock"] for w in ws), "Vinkælder flasker", "mdi:bottle-wine"),
-                "sensor.vinkaelder_drik_i_aar": (sum(w["stock"] for w in ws if w["drink_year_to"] and w["drink_year_to"] <= y),
-                                                 "Vinkælder skal drikkes i år", "mdi:glass-wine"),
-                "sensor.vinkaelder_klar": (sum(w["stock"] for w in ws if w["drink_year_from"] and w["drink_year_from"] <= y <= (w["drink_year_to"] or 0)),
-                                           "Vinkælder klar til at drikke", "mdi:glass-wine"),
+                "sensor.wine_cellar_bottles": (sum(w["stock"] for w in ws), "Wine cellar bottles", "mdi:bottle-wine"),
+                "sensor.wine_cellar_drink_this_year": (sum(w["stock"] for w in ws if w["drink_year_to"] and w["drink_year_to"] <= y),
+                                                 "Wine cellar drink this year", "mdi:glass-wine"),
+                "sensor.wine_cellar_ready": (sum(w["stock"] for w in ws if w["drink_year_from"] and w["drink_year_from"] <= y <= (w["drink_year_to"] or 0)),
+                                           "Wine cellar ready to drink", "mdi:glass-wine"),
             }
             for eid, (v, name, icon) in vals.items():
-                body = json.dumps({"state": v, "attributes": {"friendly_name": name, "unit_of_measurement": "flasker",
+                body = json.dumps({"state": v, "attributes": {"friendly_name": name, "unit_of_measurement": "bottles",
                                                               "icon": icon, "state_class": "measurement"}}).encode()
                 req = urllib.request.Request(f"http://supervisor/core/api/states/{eid}", data=body, method="POST",
                                              headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
                 urllib.request.urlopen(req, timeout=10).read()
         except Exception as e:  # noqa: BLE001
-            print("HA-sensor push fejlede:", e, flush=True)
+            print("HA sensor push failed:", e, flush=True)
 
 
 def changed():
@@ -167,10 +167,10 @@ def changed():
 
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
-    server_version = "Vinkaelder/1.0"
+    server_version = "WineCellar/1.1"
 
     def log_message(self, fmt, *args):
-        if os.environ.get("VIN_DEBUG"):
+        if os.environ.get("WINE_DEBUG"):
             super().log_message(fmt, *args)
 
     def send(self, code, body, ctype="application/json; charset=utf-8", headers=None):
@@ -236,7 +236,7 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/wines" and method == "POST":
             data = self.json_body()
             if not (data.get("description") or "").strip():
-                raise ValueError("Beskrivelse skal udfyldes.")
+                raise ValueError("Description is required.")
             if data.get("barcode") == "auto":
                 data["barcode"] = next_barcode()
             fields = [f for f in WINE_FIELDS if f in data]
@@ -255,7 +255,7 @@ class H(BaseHTTPRequestHandler):
         if m and method == "GET":
             r = c.execute("SELECT * FROM wine WHERE id=?", (m[1],)).fetchone()
             if not r:
-                return self.send(404, {"error": "Vin findes ikke"})
+                return self.send(404, {"error": "Wine not found"})
             w = enrich(r, stock_of(r["id"]))
             w["movements"] = [dict(x) for x in c.execute(
                 "SELECT * FROM movement WHERE wine_id=? ORDER BY date DESC, id DESC", (r["id"],))]
@@ -266,7 +266,7 @@ class H(BaseHTTPRequestHandler):
                 data["barcode"] = next_barcode()
             fields = [f for f in WINE_FIELDS if f in data]
             if "description" in fields and not (data["description"] or "").strip():
-                raise ValueError("Beskrivelse skal udfyldes.")
+                raise ValueError("Description is required.")
             if fields:
                 c.execute(f"UPDATE wine SET {','.join(f + '=?' for f in fields)}, updated_at=? WHERE id=?",
                           [coerce(f, data[f]) for f in fields] + [now(), m[1]])
@@ -285,7 +285,7 @@ class H(BaseHTTPRequestHandler):
             wid = int(d["wine_id"])
             r = c.execute("SELECT barcode FROM wine WHERE id=?", (wid,)).fetchone()
             if not r:
-                raise ValueError("Vin findes ikke")
+                raise ValueError("Wine not found")
             kind = d.get("kind")
             day = d.get("date") or date.today().isoformat()
             cnt = None
@@ -297,7 +297,7 @@ class H(BaseHTTPRequestHandler):
             elif kind == "out":
                 qty = -abs(int(d.get("qty") or 1))
             else:
-                raise ValueError("Ukendt type")
+                raise ValueError("Unknown movement type")
             c.execute("INSERT INTO movement (wine_id, barcode, date, qty, kind, count_value, note, source, created_at)"
                       " VALUES (?,?,?,?,?,?,?,'app',?)", (wid, r["barcode"], day, qty, kind, cnt, d.get("note"), now()))
             changed()
@@ -328,7 +328,7 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/import" and method == "POST":
             data = self.body()
             if not data:
-                raise ValueError("Ingen fil modtaget.")
+                raise ValueError("No file received.")
             res = run_import(c, data, dry_run=q.get("dry") == "1", drop_app=q.get("drop_app") == "1")
             if not res["dry_run"]:
                 changed()
@@ -336,7 +336,7 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/export.json":
             out = {"exported": now(), "wines": [dict(r) for r in c.execute("SELECT * FROM wine")],
                    "movements": [dict(r) for r in c.execute("SELECT * FROM movement")]}
-            return self.send(200, out, headers={"Content-Disposition": 'attachment; filename="vinkaelder.json"'})
+            return self.send(200, out, headers={"Content-Disposition": 'attachment; filename="wine_cellar.json"'})
         if path == "/api/export.csv":
             buf = io.StringIO()
             cols = ["id", "description", "vintage", "wine_type", "producer", "country", "region", "grapes", "stock",
@@ -347,7 +347,7 @@ class H(BaseHTTPRequestHandler):
             for w in all_wines():
                 wr.writerow([w.get(k) for k in cols])
             return self.send(200, "﻿" + buf.getvalue(), "text/csv; charset=utf-8",
-                             {"Content-Disposition": 'attachment; filename="vinkaelder.csv"'})
+                             {"Content-Disposition": 'attachment; filename="wine_cellar.csv"'})
         return self.send(404, {"error": "not found"})
 
 
@@ -355,7 +355,7 @@ def main():
     db.con()
     threading.Thread(target=ha_push_loop, daemon=True).start()
     changed()
-    print(f"Vinkælder kører på port {PORT}, database: {db.DB_PATH}", flush=True)
+    print(f"Wine Cellar running on port {PORT}, database: {db.DB_PATH}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
 
 

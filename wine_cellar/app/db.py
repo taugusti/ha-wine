@@ -3,7 +3,7 @@ import sqlite3
 import threading
 from datetime import datetime
 
-DB_PATH = os.environ.get("VIN_DB", "/data/vinkaelder.db")
+DB_PATH = os.environ.get("WINE_DB", "/data/wine_cellar.db")
 _lock = threading.RLock()
 
 SCHEMA = """
@@ -12,10 +12,10 @@ CREATE TABLE IF NOT EXISTS wine (
   barcode TEXT,
   description TEXT NOT NULL,
   vintage INTEGER,
-  wine_type TEXT DEFAULT 'rød',
+  wine_type TEXT DEFAULT 'red',
   country TEXT, producer TEXT, region TEXT, grapes TEXT,
-  drink_from_age INTEGER, drink_to_age INTEGER,      -- dit eget vindue (år efter høst)
-  imp_est_from INTEGER, imp_est_to INTEGER,          -- estimat importeret fra Excel
+  drink_from_age INTEGER, drink_to_age INTEGER,      -- own drinking window (years after vintage)
+  imp_est_from INTEGER, imp_est_to INTEGER,          -- legacy, not used
   advice TEXT, rationale TEXT, serving TEXT,
   purchase_price REAL, list_price REAL,
   shop TEXT, note TEXT, link TEXT, location TEXT,
@@ -29,9 +29,9 @@ CREATE TABLE IF NOT EXISTS movement (
   wine_id INTEGER REFERENCES wine(id) ON DELETE CASCADE,
   barcode TEXT,
   date TEXT NOT NULL,
-  qty INTEGER NOT NULL,              -- ændring i antal flasker (+/-)
+  qty INTEGER NOT NULL,              -- change in number of bottles (+/-)
   kind TEXT NOT NULL,                -- in | out | count
-  count_value INTEGER,               -- ved optælling: det talte antal
+  count_value INTEGER,               -- for stock counts: the counted quantity
   note TEXT,
   source TEXT NOT NULL DEFAULT 'app',-- app | excel
   created_at TEXT

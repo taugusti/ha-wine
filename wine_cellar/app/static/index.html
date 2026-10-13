@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wine Cellar</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark" aria-hidden="true"></span>Wine Cellar</div>
+  <nav class="tabs" role="tablist">
+    <button data-tab="list" class="on">Wines</button>
+    <button data-tab="stats">Statistics</button>
+    <button data-tab="data">Import &amp; export</button>
+  </nav>
+  <button class="btn primary" id="newWine">+ New wine</button>
+</header>
+
+<main>
+  <section id="tab-list" class="tab on">
+    <div class="toolbar">
+      <div class="search">
+        <input id="q" type="search" placeholder="Search wine, producer, region, grape … or scan a barcode" autocomplete="off">
+        <button class="btn icon" id="camBtn" hidden title="Scan with camera">⌁</button>
+      </div>
+      <select id="fCountry"><option value="">All countries</option></select>
+      <select id="fStatus">
+        <option value="">Any drinking status</option>
+        <option value="over">Past window</option>
+        <option value="now">Drink soon (this/next year)</option>
+        <option value="ready">Ready</option>
+        <option value="young">Too young</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="fAll"> Show sold out</label>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr>
+          <th data-k="description">Wine</th>
+          <th data-k="vintage" class="num">Vintage</th>
+          <th data-k="region">Region</th>
+          <th data-k="grapes" class="hide-md">Grapes</th>
+          <th data-k="stock" class="num">Qty</th>
+          <th data-k="drink_year_to">Drinking window</th>
+          <th data-k="list_price" class="num hide-md">Price</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-stats" class="tab"></section>
+
+  <section id="tab-data" class="tab">
+    <div class="panel">
+      <h2>Import from Excel</h2>
+      <p>Choose your <code>vindatabase.xlsm</code>. Wines are matched on barcode (otherwise description + vintage) and updated. All movements from the <em>Lager</em> sheet are replaced, so you can run the import again and again while Excel is still your primary database.</p>
+      <p id="metaInfo" class="muted"></p>
+      <div class="row">
+        <input type="file" id="xfile" accept=".xlsm,.xlsx">
+        <label class="chk"><input type="checkbox" id="dropApp"> Delete movements recorded in the app</label>
+      </div>
+      <div class="row">
+        <button class="btn" id="dryBtn">Preview</button>
+        <button class="btn primary" id="impBtn">Import</button>
+      </div>
+      <div id="impResult"></div>
+    </div>
+    <div class="panel">
+      <h2>Export</h2>
+      <p>The database is included in Home Assistant backups. You can also download the data directly here.</p>
+      <div class="row">
+        <a class="btn" href="api/export.csv">Wines as CSV (Excel)</a>
+        <a class="btn" href="api/export.json">Full backup (JSON)</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+
+<div class="cam" id="cam" hidden>
+  <video id="camVideo" playsinline muted></video>
+  <button class="btn" id="camClose">Close</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="static/app.js"></script>
+</body>
+</html>

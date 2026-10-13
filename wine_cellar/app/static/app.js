@@ -4,18 +4,18 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fold = (s) => String(s ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
-const kr = (n) => n == null ? "" : Math.round(n).toLocaleString("da-DK") + " kr";
+const kr = (n) => n == null ? "" : Math.round(n).toLocaleString("en-GB") + " DKK";
 const today = () => new Date().toISOString().slice(0, 10);
 
 const STATUS = {
-  young: "For ung", ready: "Klar", now: "Drik snart", over: "Overskredet", unknown: "Ukendt",
+  young: "Too young", ready: "Ready", now: "Drink soon", over: "Past window", unknown: "Unknown",
 };
-const TYPES = ["rød", "hvid", "rosé", "mousserende", "dessert", "hedvin"];
-const KIND = { in: "Ind", out: "Ud", count: "Optælling" };
+const TYPES = ["red", "white", "rosé", "sparkling", "dessert", "fortified"];
+const KIND = { in: "In", out: "Out", count: "Stock count" };
 
 let wines = [];
 let sort = load("sort", { k: "drink_year_to", dir: 1 });
-let current = null; // vin i skuffen
+let current = null; // wine shown in the drawer
 
 function load(k, d) { try { return JSON.parse(localStorage.getItem("vk." + k)) ?? d; } catch { return d; } }
 function save(k, v) { try { localStorage.setItem("vk." + k, JSON.stringify(v)); } catch { /* ignore */ } }
@@ -38,15 +38,15 @@ function status(w) {
   const f = w.drink_year_from, t = w.drink_year_to;
   if (t == null) return "unknown";
   if (Y > t) return "over";
-  if (Y >= t - 1) return "now"; // i år eller næste år
+  if (Y >= t - 1) return "now"; // this year or next year
   if (Y >= f) return "ready";
   return "young";
 }
 
-// ------------------------------------------------------------- liste
+// ------------------------------------------------------------- list
 async function refresh() {
   wines = await api("api/wines");
-  const countries = [...new Map(wines.filter((w) => w.country).map((w) => [fold(w.country), w.country])).values()].sort((a, b) => a.localeCompare(b, "da"));
+  const countries = [...new Map(wines.filter((w) => w.country).map((w) => [fold(w.country), w.country])).values()].sort((a, b) => a.localeCompare(b, "en"));
   const sel = $("#fCountry"), cur = sel.value;
   sel.innerHTML = '<option value="">Alle lande</option>' + countries.map((c) => `<option value="${esc(fold(c))}">${esc(c[0].toUpperCase() + c.slice(1))}</option>`).join("");
   sel.value = cur;
@@ -74,17 +74,17 @@ function cmp(a, b) {
   let x = a[k], y = b[k];
   if (k === "list_price") { x = a.list_price ?? a.purchase_price; y = b.list_price ?? b.purchase_price; }
   const nx = x == null || x === "", ny = y == null || y === "";
-  if (nx !== ny) return nx ? 1 : -1; // tomme felter altid sidst
+  if (nx !== ny) return nx ? 1 : -1; // empty values always last
   let r = 0;
-  if (!nx) r = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "da", { sensitivity: "base" });
+  if (!nx) r = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "en", { sensitivity: "base" });
   r *= sort.dir;
   if (r === 0 && k === "drink_year_to") r = (a.drink_year_from ?? 9999) - (b.drink_year_from ?? 9999);
-  return r || a.description.localeCompare(b.description, "da");
+  return r || a.description.localeCompare(b.description, "en");
 }
 
 function winCell(w) {
   const s = status(w);
-  if (w.drink_year_to == null) return `<span class="s-unknown">Ukendt (mangler årgang)</span>`;
+  if (w.drink_year_to == null) return `<span class="s-unknown">Unknown (no vintage)</span>`;
   const lo = Y - 6, hi = Y + 20, pct = (v) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
   const l = pct(w.drink_year_from), r = pct(w.drink_year_to + 1);
   return `<div class="win s-${s}">
@@ -108,86 +108,86 @@ function render() {
     <td class="num c-stock"><span class="stockn">${w.stock}</span></td>
     <td class="c-win">${winCell(w)}</td>
     <td class="num c-price hide-md">${kr(w.list_price ?? w.purchase_price)}</td>
-  </tr>`).join("") || `<tr><td colspan="7" class="muted" style="padding:30px;text-align:center">Ingen vine matcher.</td></tr>`;
+  </tr>`).join("") || `<tr><td colspan="7" class="muted" style="padding:30px;text-align:center">No wines match.</td></tr>`;
   const bottles = rows.reduce((s, w) => s + Math.max(0, w.stock), 0);
   const due = rows.filter((w) => w.stock > 0 && w.drink_year_to != null && w.drink_year_to <= Y + 1).reduce((s, w) => s + w.stock, 0);
-  $("#summary").innerHTML = `<b>${rows.length}</b> vine · <b>${bottles}</b> flasker` + (due ? ` · <span class="s-now"><b>${due}</b> flasker bør drikkes senest næste år</span>` : "");
+  $("#summary").innerHTML = `<b>${rows.length}</b> wines · <b>${bottles}</b> bottles` + (due ? ` · <span class="s-now"><b>${due}</b> bottles should be drunk by next year</span>` : "");
 }
 
-// ------------------------------------------------------------- skuffe (detalje / redigering)
+// ------------------------------------------------------------- drawer (detail / edit)
 function field(name, label, w, type = "text", extra = "") {
   const v = w[name] ?? "";
   return `<label class="${extra}">${label}<input type="${type}" name="${name}" value="${esc(v)}" ${type === "number" ? 'step="any"' : ""}></label>`;
 }
 
 async function openWine(id, preset = {}) {
-  const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "rød", vintage: Y - 2, movements: [], stock: 0, ...preset };
+  const w = id ? await api(`api/wines/${id}`) : { description: "", wine_type: "red", vintage: Y - 2, movements: [], stock: 0, ...preset };
   current = w;
   const d = $("#drawer");
   const isNew = !id;
   d.innerHTML = `
-    <div class="dhead"><h2>${isNew ? "Ny vin" : esc(w.description)}</h2><button class="btn" data-close>Luk</button></div>
+    <div class="dhead"><h2>${isNew ? "New wine" : esc(w.description)}</h2><button class="btn" data-close>Close</button></div>
     <div class="dbody">
       ${isNew ? "" : `<div class="card">
-        <h3>Lager</h3>
+        <h3>Stock</h3>
         <div class="stockrow">
-          <div class="bignum">${w.stock}<small>flasker</small></div>
+          <div class="bignum">${w.stock}<small>bottles</small></div>
           <div class="acts">
-            <input type="number" id="mvQty" value="1" min="0" aria-label="Antal">
-            <button class="btn primary" data-mv="out">Ud</button>
-            <button class="btn" data-mv="in">Ind</button>
-            <button class="btn" data-mv="count" title="Sæt lageret til det angivne antal">Sæt lager til</button>
-            <input type="date" id="mvDate" value="${today()}" aria-label="Dato">
+            <input type="number" id="mvQty" value="1" min="0" aria-label="Quantity">
+            <button class="btn primary" data-mv="out">Out</button>
+            <button class="btn" data-mv="in">In</button>
+            <button class="btn" data-mv="count" title="Set the stock to the given quantity">Set stock to</button>
+            <input type="date" id="mvDate" value="${today()}" aria-label="Date">
           </div>
         </div>
       </div>`}
 
       <form id="wf" class="card" autocomplete="off">
-        <h3>Vin</h3>
+        <h3>Wine</h3>
         <div class="grid">
-          ${field("description", "Beskrivelse", w, "text", "wide")}
-          ${field("producer", "Producent", w)}
-          ${field("vintage", "Årgang", w, "number")}
-          ${field("country", "Land", w)}
-          ${field("region", "Distrikt (stort → lille, kommasepareret)", w)}
-          ${field("grapes", "Druer", w, "text", "wide")}
-          <label>Type<select name="wine_type">${TYPES.map((t) => `<option ${t === (w.wine_type || "rød") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
-          ${field("location", "Placering i kælderen", w)}
-          ${field("purchase_price", "Anskaffelsespris (kr)", w, "number")}
-          ${field("list_price", "Listepris (kr)", w, "number")}
-          ${field("shop", "Vinhandel", w)}
-          <label>Stregkode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}"><button type="button" class="btn" id="genBc" title="Generér egen EAN-13-kode">Ny kode</button></span></label>
+          ${field("description", "Description", w, "text", "wide")}
+          ${field("producer", "Producer", w)}
+          ${field("vintage", "Vintage", w, "number")}
+          ${field("country", "Country", w)}
+          ${field("region", "Region (broad → narrow, comma-separated)", w)}
+          ${field("grapes", "Grapes", w, "text", "wide")}
+          <label>Type<select name="wine_type">${TYPES.map((t) => `<option ${t === (w.wine_type || "red") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+          ${field("location", "Location in cellar", w)}
+          ${field("purchase_price", "Purchase price (DKK)", w, "number")}
+          ${field("list_price", "List price (DKK)", w, "number")}
+          ${field("shop", "Shop", w)}
+          <label>Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
           ${field("link", "Link", w, "url", "wide")}
-          <label class="wide">Note<textarea name="note">${esc(w.note ?? "")}</textarea></label>
-          ${isNew ? field("initial_qty", "Antal flasker ved oprettelse", w, "number") : ""}
+          <label class="wide">Notes<textarea name="note">${esc(w.note ?? "")}</textarea></label>
+          ${isNew ? field("initial_qty", "Bottles in stock at creation", w, "number") : ""}
         </div>
       </form>
 
       <div class="card">
-        <h3>Drikkevindue</h3>
+        <h3>Drinking window</h3>
         <div class="grid" style="margin-bottom:12px">
-          <label>Drik fra (år efter høst)<input form="wf" type="number" name="drink_from_age" value="${esc(w.drink_from_age ?? "")}"></label>
-          <label>Drik til (år efter høst)<input form="wf" type="number" name="drink_to_age" value="${esc(w.drink_to_age ?? "")}"></label>
+          <label>Drink from (years after vintage)<input form="wf" type="number" name="drink_from_age" value="${esc(w.drink_from_age ?? "")}"></label>
+          <label>Drink until (years after vintage)<input form="wf" type="number" name="drink_to_age" value="${esc(w.drink_to_age ?? "")}"></label>
         </div>
         <div class="est" id="estBox"></div>
         <div class="grid" style="margin-top:12px">
-          <label class="wide">Drikkeråd<textarea form="wf" name="advice">${esc(w.advice ?? "")}</textarea></label>
-          <label class="wide">Servering<textarea form="wf" name="serving">${esc(w.serving ?? "")}</textarea></label>
+          <label class="wide">Drinking advice<textarea form="wf" name="advice">${esc(w.advice ?? "")}</textarea></label>
+          <label class="wide">Serving<textarea form="wf" name="serving">${esc(w.serving ?? "")}</textarea></label>
         </div>
       </div>
 
       <div class="foot">
-        <button class="btn primary" id="saveW">${isNew ? "Opret vin" : "Gem ændringer"}</button>
-        ${isNew ? "" : `<button class="btn danger" id="delW">Slet vin</button>`}
+        <button class="btn primary" id="saveW">${isNew ? "Create wine" : "Save changes"}</button>
+        ${isNew ? "" : `<button class="btn danger" id="delW">Delete wine</button>`}
       </div>
 
-      ${isNew ? "" : `<div class="card"><h3>Bevægelser</h3>
+      ${isNew ? "" : `<div class="card"><h3>Movements</h3>
         <ul class="moves">${w.movements.map((m) => `<li>
           <span>${esc(m.date)}</span>
           <span class="q">${m.qty > 0 ? "+" : ""}${m.qty}</span>
           <span>${KIND[m.kind] || m.kind}${m.kind === "count" ? ` (${m.count_value} stk)` : ""}${m.note ? " · " + esc(m.note) : ""}${m.source === "excel" ? '<span class="tag">Excel</span>' : ""}</span>
-          <button class="x" data-delmv="${m.id}" title="Slet bevægelse">✕</button>
-        </li>`).join("") || '<li class="muted">Ingen bevægelser endnu.</li>'}</ul></div>`}
+          <button class="x" data-delmv="${m.id}" title="Delete movement">✕</button>
+        </li>`).join("") || '<li class="muted">No movements yet.</li>'}</ul></div>`}
     </div>`;
   d.classList.add("open"); d.setAttribute("aria-hidden", "false"); $("#scrim").hidden = false;
   renderEst();
@@ -207,11 +207,11 @@ async function renderEst() {
   let est;
   try { est = await send("api/estimate", "POST", f); } catch { return; }
   const own = f.drink_from_age !== "" && f.drink_to_age !== "";
-  const line = (lbl, a, b, why, use) => `<span class="lbl">${lbl}</span><span>${a}–${b} år ${yr(a) != null ? `<span class="muted">(${yr(a)}–${yr(b)})</span>` : ""}</span>
-     ${use ? `<button type="button" class="btn" data-use="${a},${b}">Brug</button>` : "<span></span>"}${why ? `<span class="why">${esc(why)}</span>` : ""}`;
+  const line = (lbl, a, b, why, use) => `<span class="lbl">${lbl}</span><span>${a}–${b} yrs ${yr(a) != null ? `<span class="muted">(${yr(a)}–${yr(b)})</span>` : ""}</span>
+     ${use ? `<button type="button" class="btn" data-use="${a},${b}">Use</button>` : "<span></span>"}${why ? `<span class="why">${esc(why)}</span>` : ""}`;
   $("#estBox").innerHTML =
-    (own ? line("Dit vindue", f.drink_from_age, f.drink_to_age, "", false) : `<span class="lbl">Dit vindue</span><span class="muted">ikke angivet, så estimatet bruges</span><span></span>`) +
-    line("Auto-estimat", est.from, est.to, est.rationale + " " + est.advice, true);
+    (own ? line("Your window", f.drink_from_age, f.drink_to_age, "", false) : `<span class="lbl">Your window</span><span class="muted">not set, so the estimate is used</span><span></span>`) +
+    line("Auto estimate", est.from, est.to, est.rationale + " " + est.advice, true);
 }
 
 function closeDrawer() {
@@ -220,21 +220,21 @@ function closeDrawer() {
 
 async function saveWine() {
   const f = formData();
-  if (!f.description.trim()) { toast("Beskrivelse skal udfyldes"); return; }
+  if (!f.description.trim()) { toast("Description is required"); return; }
   try {
-    if (current.id) { await send(`api/wines/${current.id}`, "PUT", f); toast("Gemt"); await refresh(); openWine(current.id); }
-    else { const r = await send("api/wines", "POST", f); toast("Vin oprettet"); await refresh(); openWine(r.id); }
-  } catch (e) { toast("Fejl: " + e.message); }
+    if (current.id) { await send(`api/wines/${current.id}`, "PUT", f); toast("Saved"); await refresh(); openWine(current.id); }
+    else { const r = await send("api/wines", "POST", f); toast("Wine created"); await refresh(); openWine(r.id); }
+  } catch (e) { toast("Error: " + e.message); }
 }
 
 async function move(kind) {
   const n = parseInt($("#mvQty").value, 10);
-  if (!Number.isFinite(n) || n < 0 || (kind !== "count" && n === 0)) { toast("Angiv et gyldigt antal"); return; }
+  if (!Number.isFinite(n) || n < 0 || (kind !== "count" && n === 0)) { toast("Enter a valid quantity"); return; }
   try {
     const r = await send("api/movements", "POST", { wine_id: current.id, kind, qty: n, count: n, date: $("#mvDate").value });
-    toast(`${KIND[kind]} registreret, lager: ${r.stock}`);
+    toast(`${KIND[kind]} recorded, stock: ${r.stock}`);
     await refresh(); openWine(current.id);
-  } catch (e) { toast("Fejl: " + e.message); }
+  } catch (e) { toast("Error: " + e.message); }
 }
 
 $("#drawer").addEventListener("click", async (e) => {
@@ -248,11 +248,11 @@ $("#drawer").addEventListener("click", async (e) => {
   } else if (t.id === "genBc") {
     $('[name="barcode"]').value = (await api("api/next-barcode")).barcode;
   } else if (t.dataset.delmv) {
-    if (!confirm("Slet denne bevægelse?")) return;
+    if (!confirm("Delete this movement?")) return;
     await api(`api/movements/${t.dataset.delmv}`, { method: "DELETE" }); await refresh(); openWine(current.id);
   } else if (t.id === "delW") {
-    if (!confirm(`Slet "${current.description}" og alle dens bevægelser?`)) return;
-    await api(`api/wines/${current.id}`, { method: "DELETE" }); closeDrawer(); toast("Vin slettet"); refresh();
+    if (!confirm(`Delete "${current.description}" and all its movements?`)) return;
+    await api(`api/wines/${current.id}`, { method: "DELETE" }); closeDrawer(); toast("Wine deleted"); refresh();
   }
 });
 $("#drawer").addEventListener("input", (e) => {
@@ -262,7 +262,7 @@ $("#drawer").addEventListener("input", (e) => {
 $("#scrim").addEventListener("click", closeDrawer);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current) closeDrawer(); });
 
-// ------------------------------------------------------------- søg, sortér, scan
+// ------------------------------------------------------------- search, sort, scan
 $("#tbl thead").addEventListener("click", (e) => {
   const th = e.target.closest("th"); if (!th) return;
   sort = sort.k === th.dataset.k ? { k: sort.k, dir: -sort.dir } : { k: th.dataset.k, dir: th.dataset.k === "stock" || th.dataset.k === "list_price" ? -1 : 1 };
@@ -280,8 +280,8 @@ async function scanned(code) {
   const hits = await api("api/lookup?barcode=" + encodeURIComponent(code));
   $("#q").value = ""; render();
   if (hits.length === 1) openWine(hits[0].id);
-  else if (hits.length > 1) { $("#q").value = code; $("#fAll").checked = true; render(); toast(`${hits.length} vine har denne stregkode`); }
-  else { toast("Ukendt stregkode, så der oprettes en ny vin"); openWine(null, { barcode: code }); }
+  else if (hits.length > 1) { $("#q").value = code; $("#fAll").checked = true; render(); toast(`${hits.length} wines share this barcode`); }
+  else { toast("Unknown barcode, creating a new wine"); openWine(null, { barcode: code }); }
 }
 
 if ("BarcodeDetector" in window && navigator.mediaDevices) {
@@ -297,14 +297,14 @@ if ("BarcodeDetector" in window && navigator.mediaDevices) {
         const codes = await det.detect(v).catch(() => []);
         if (codes.length) { stop(); scanned(codes[0].rawValue); }
       }, 250);
-    } catch (e) { toast("Kamera ikke tilgængeligt: " + e.message); stop(); }
+    } catch (e) { toast("Camera not available: " + e.message); stop(); }
   });
   $("#camClose").addEventListener("click", stop);
 }
 
 $("#newWine").addEventListener("click", () => openWine(null));
 
-// ------------------------------------------------------------- faner
+// ------------------------------------------------------------- tabs
 $$(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 function showTab(name) {
   $$(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
@@ -314,7 +314,7 @@ function showTab(name) {
   if (name === "data") renderMeta();
 }
 
-// ------------------------------------------------------------- statistik
+// ------------------------------------------------------------- statistics
 function bars(obj, opts = {}) {
   const entries = Object.entries(obj);
   if (opts.sortKey) entries.sort(opts.sortKey);
@@ -324,22 +324,22 @@ function bars(obj, opts = {}) {
 
 async function renderStats() {
   const s = await api("api/stats");
-  const yrSort = ([a], [b]) => (a.startsWith("før") ? -1 : b.startsWith("før") ? 1 : a.localeCompare(b));
+  const yrSort = ([a], [b]) => (a.startsWith("before") ? -1 : b.startsWith("before") ? 1 : a.localeCompare(b));
   const countries = {};
   Object.entries(s.by_country).forEach(([k, v]) => { const n = k[0].toUpperCase() + k.slice(1).toLowerCase(); countries[n] = (countries[n] || 0) + v; });
   $("#tab-stats").innerHTML = `
     <div class="kpis">
-      <div class="kpi"><div class="v">${s.bottles}</div><div class="l">flasker på lager</div></div>
-      <div class="kpi"><div class="v">${s.wines}</div><div class="l">forskellige vine</div></div>
-      <div class="kpi"><div class="v">${kr(s.value)}</div><div class="l">værdi (listepris)</div></div>
-      <div class="kpi"><div class="v">${kr(s.cost)}</div><div class="l">anskaffelsespris</div></div>
+      <div class="kpi"><div class="v">${s.bottles}</div><div class="l">bottles in stock</div></div>
+      <div class="kpi"><div class="v">${s.wines}</div><div class="l">different wines</div></div>
+      <div class="kpi"><div class="v">${kr(s.value)}</div><div class="l">value (list price)</div></div>
+      <div class="kpi"><div class="v">${kr(s.cost)}</div><div class="l">purchase cost</div></div>
     </div>
     <div class="sgrid">
-      <div class="panel"><h2>Flasker pr. sidste drikkeår</h2>${bars(s.by_drink_year_to, { sortKey: yrSort, cls: (k) => (k.startsWith("før") ? "past" : Number(k) === s.year ? "cur" : "") })}</div>
-      <div class="panel"><h2>Flasker pr. årgang</h2>${bars(s.by_vintage, { sortKey: ([a], [b]) => a.localeCompare(b) })}</div>
-      <div class="panel"><h2>Flasker pr. land</h2>${bars(countries, { sortKey: ([, a], [, b]) => b - a })}</div>
-      <div class="panel"><h2>Ind og ud pr. år</h2>
-        <div style="overflow-x:auto"><table class="flow"><thead><tr><th>År</th><th class="num">Ind</th><th class="num">Ud</th><th class="num">Netto</th><th class="num">Ultimo</th></tr></thead>
+      <div class="panel"><h2>Bottles by last drinking year</h2>${bars(s.by_drink_year_to, { sortKey: yrSort, cls: (k) => (k.startsWith("before") ? "past" : Number(k) === s.year ? "cur" : "") })}</div>
+      <div class="panel"><h2>Bottles by vintage</h2>${bars(s.by_vintage, { sortKey: ([a], [b]) => a.localeCompare(b) })}</div>
+      <div class="panel"><h2>Bottles by country</h2>${bars(countries, { sortKey: ([, a], [, b]) => b - a })}</div>
+      <div class="panel"><h2>In and out per year</h2>
+        <div style="overflow-x:auto"><table class="flow"><thead><tr><th>Year</th><th class="num">In</th><th class="num">Out</th><th class="num">Net</th><th class="num">Year end</th></tr></thead>
         <tbody>${Object.entries(s.flow).map(([y, f]) => `<tr><td>${y}</td><td class="num">${f.in}</td><td class="num">${f.out}</td><td class="num">${f.in - f.out}</td><td class="num">${f.ultimo}</td></tr>`).join("")}</tbody></table></div>
       </div>
     </div>`;
@@ -348,34 +348,34 @@ async function renderStats() {
 // ------------------------------------------------------------- import
 async function renderMeta() {
   const m = await api("api/meta");
-  $("#metaInfo").textContent = `${m.wines} vine i databasen · ${m.excel_moves} bevægelser fra Excel · ${m.app_moves} registreret i appen` +
-    (m.last_import ? ` · sidste import ${m.last_import.replace("T", " ")}` : " · ingen import endnu");
+  $("#metaInfo").textContent = `${m.wines} wines in the database · ${m.excel_moves} movements from Excel · ${m.app_moves} recorded in the app` +
+    (m.last_import ? ` · last import ${m.last_import.replace("T", " ")}` : " · no import yet");
 }
 
 async function doImport(dry) {
   const f = $("#xfile").files[0];
-  if (!f) { toast("Vælg en Excel-fil først"); return; }
+  if (!f) { toast("Choose an Excel file first"); return; }
   const drop = $("#dropApp").checked;
-  $("#impResult").innerHTML = '<p class="muted">Læser filen …</p>';
+  $("#impResult").innerHTML = '<p class="muted">Reading the file …</p>';
   try {
     const r = await api(`api/import?dry=${dry ? 1 : 0}&drop_app=${drop ? 1 : 0}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: f });
     const li = (cls, txt) => `<li class="${cls}">${txt}</li>`;
     $("#impResult").innerHTML = `<div class="res">
-      <b>${dry ? "Forhåndsvisning, intet er gemt" : "Import gennemført"}</b>
+      <b>${dry ? "Preview, nothing has been saved" : "Import complete"}</b>
       <ul>
-        ${li("", `${r.wines_in_file} vine i filen: ${r.wines_new} nye, ${r.wines_updated} opdateret, ${r.wines_unchanged} uændret`)}
-        ${li("", `${r.moves_imported} lagerbevægelser importeret`)}
-        ${r.stock_mismatch.length ? li("err", `Lagertal afviger fra Excel for ${r.stock_mismatch.length} vine: ` + r.stock_mismatch.map((m) => `${esc(m.description)} (Excel ${m.excel}, app ${m.app})`).join("; ")) : li("ok", "Lagertal stemmer med Excel for alle vine")}
-        ${r.orphan_moves ? li("warn", `${r.orphan_moves} bevægelse(r) med stregkode uden vin: ${r.orphan_barcodes.map(esc).join(", ")}. De knyttes automatisk på, hvis du opretter en vin med den kode.`) : ""}
-        ${r.app_moves_kept ? li("warn", `${r.app_moves_kept} bevægelser registreret i appen er bevaret. Har du også ført dem i Excel, tælles de dobbelt.`) : ""}
-        ${r.app_moves_deleted ? li("", `${r.app_moves_deleted} app-bevægelser slettet`) : ""}
-        ${r.wines_not_in_file.length ? li("warn", `${r.wines_not_in_file.length} tidligere importerede vine findes ikke længere i filen (beholdt): ${r.wines_not_in_file.map(esc).join("; ")}`) : ""}
+        ${li("", `${r.wines_in_file} wines in the file: ${r.wines_new} new, ${r.wines_updated} updated, ${r.wines_unchanged} unchanged`)}
+        ${li("", `${r.moves_imported} stock movements imported`)}
+        ${r.stock_mismatch.length ? li("err", `Stock differs from Excel for ${r.stock_mismatch.length} wines: ` + r.stock_mismatch.map((m) => `${esc(m.description)} (Excel ${m.excel}, app ${m.app})`).join("; ")) : li("ok", "Stock matches Excel for all wines")}
+        ${r.orphan_moves ? li("warn", `${r.orphan_moves} movement(s) with a barcode that matches no wine: ${r.orphan_barcodes.map(esc).join(", ")}. They are linked automatically if you create a wine with that code.`) : ""}
+        ${r.app_moves_kept ? li("warn", `${r.app_moves_kept} movements recorded in the app were kept. If you also entered them in Excel, they are counted twice.`) : ""}
+        ${r.app_moves_deleted ? li("", `${r.app_moves_deleted} app movements deleted`) : ""}
+        ${r.wines_not_in_file.length ? li("warn", `${r.wines_not_in_file.length} previously imported wines are no longer in the file (kept): ${r.wines_not_in_file.map(esc).join("; ")}`) : ""}
       </ul></div>`;
     if (!dry) { await refresh(); renderMeta(); }
-  } catch (e) { $("#impResult").innerHTML = `<p class="err">Fejl: ${esc(e.message)}</p>`; }
+  } catch (e) { $("#impResult").innerHTML = `<p class="err">Error: ${esc(e.message)}</p>`; }
 }
 $("#dryBtn").addEventListener("click", () => doImport(true));
 $("#impBtn").addEventListener("click", () => doImport(false));
 
 // ------------------------------------------------------------- start
-refresh().then(() => showTab(load("tab", "list"))).catch((e) => toast("Kunne ikke hente data: " + e.message));
+refresh().then(() => showTab(load("tab", "list"))).catch((e) => toast("Could not load data: " + e.message));
