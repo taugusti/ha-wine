@@ -1,3 +1,6 @@
+# 1.6.2
+- The app checks for a new version when it becomes visible (and every 2 minutes) and reloads itself, so an update is picked up even if the Home Assistant app keeps the page open.
+
 # 1.6.1
 - Fixed: Smart fill (photo buttons) could show as "not available" if the drawer was opened before the AI status was loaded.
 - Static files are cache-busted per version, and the version is shown next to the app name.

@@ -399,6 +399,8 @@ class H(BaseHTTPRequestHandler):
             proposals.decide(c, int(mp[1]), mp[2] == "accept", (self.json_body() or {}).get("changes"))
             changed()
             return self.send(200, {"ok": True})
+        if path == "/api/version":
+            return self.send(200, {"version": VERSION})
         if path == "/api/next-barcode":
             return self.send(200, {"barcode": next_barcode()})
         if path == "/api/estimate" and method == "POST":

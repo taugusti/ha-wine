@@ -729,5 +729,20 @@ $("#impBtn").addEventListener("click", () => doImport(false));
 
 // ------------------------------------------------------------- start
 api("api/ai/status").then((r) => { aiEntity = r.entity; }).catch(() => {});
+// ------------------------------------------------------------- auto reload after an app update
+const LOADED_VERSION = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([^&]+)/) || [])[1] || "";
+async function checkVersion() {
+  try {
+    const v = (await api("api/version")).version;
+    if (!LOADED_VERSION || !v || v === LOADED_VERSION) return;
+    if (!current) location.reload();       // nothing open: reload right away
+    else toast(`Wine Cellar was updated to v${v}. Close this wine to reload.`);
+  } catch { /* offline */ }
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkVersion(); });
+setInterval(checkVersion, 120000);
+const _close = closeDrawer;
+closeDrawer = function () { _close(); checkVersion(); };
+
 updateReviewCount();
 refresh().then(() => showTab(load("tab", "list"))).catch((e) => toast("Could not load data: " + e.message));
