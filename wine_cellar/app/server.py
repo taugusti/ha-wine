@@ -25,6 +25,7 @@ import ai
 import vocab
 import proposals
 import bulk
+import recommend
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 def _version():
@@ -322,6 +323,18 @@ class H(BaseHTTPRequestHandler):
     def dispatch_ai(self, method, path):
         if path == "/api/ai/status":
             return self.send(200, {"entity": ai.ai_entity()})
+        if path == "/api/ai/recs":
+            if method == "POST":
+                recommend.start(enrich)
+            c = db.connect()
+            try:
+                return self.send(200, {"state": recommend.status(), "last": recommend.last(c),
+                                       "analysis": recommend.analysis(c, enrich)})
+            finally:
+                c.close()
+        if path == "/api/ai/recs/cancel" and method == "POST":
+            recommend.cancel()
+            return self.send(200, {"state": recommend.status()})
         if path == "/api/ai/bulk":
             if method == "POST":
                 bulk.start(only_missing=bool(self.json_body().get("only_missing", True)))

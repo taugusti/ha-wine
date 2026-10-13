@@ -1,0 +1,267 @@
+"""Recommendations: find wines on offer in Danish shops that match what the owner buys most and fill the years
+where few bottles will be at their peak.
+
+1. analysis(): taste profile (styles, producers, grapes, price level, weighted by bottles bought) and the peak
+   gaps (years where fewer bottles are at peak than the owner drinks in a year).
+2. run(): asks the web search agent once per top style for current offers whose peak falls in the gap years.
+   Runs in a background thread; the last result is kept in the meta table.
+"""
+import json
+import statistics
+import threading
+import time
+import urllib.parse
+from collections import Counter, defaultdict
+from datetime import date
+
+import ai
+import db
+import vocab
+
+YEARS_AHEAD = 15
+_state = {"status": "idle"}
+_lock = threading.Lock()
+_cancel = threading.Event()
+
+
+def _wines(con):
+    rows = con.execute("""SELECT w.*, COALESCE(m.stock, 0) stock, COALESCE(m.bought, 0) bought FROM wine w
+                          LEFT JOIN (SELECT wine_id, SUM(qty) stock, SUM(CASE WHEN qty > 0 AND kind != 'count' THEN qty ELSE 0 END) bought
+                                     FROM movement GROUP BY wine_id) m ON m.wine_id = w.id WHERE w.archived = 0""").fetchall()
+    return [dict(r) for r in rows]
+
+
+def _area(w):
+    parts = vocab.split_parts(w.get("region"))
+    return parts[0] if parts else (w.get("country") or "")
+
+
+def analysis(con, enrich):
+    """Taste profile and peak gaps. `enrich` is server.enrich (adds the effective drinking/peak years)."""
+    y = date.today().year
+    wines = [enrich(w, w["stock"]) for w in _wines(con)]
+    weight = lambda w: max(w["bought"], w["stock"], 0)  # noqa: E731
+
+    styles = Counter()
+    style_info = defaultdict(lambda: {"producers": Counter(), "grapes": Counter(), "paid": [], "value": [], "examples": Counter()})
+    producers, grapes = Counter(), Counter()
+    for w in wines:
+        n = weight(w)
+        if not n:
+            continue
+        key = (w.get("country") or "?", _area(w) or "?", w.get("wine_type") or "red")
+        styles[key] += n
+        si = style_info[key]
+        if w.get("producer"):
+            si["producers"][w["producer"]] += n
+            producers[w["producer"]] += n
+        for g in vocab.split_parts(w.get("grapes")):
+            si["grapes"][g] += n
+            grapes[g] += n
+        if w.get("purchase_price"):
+            si["paid"] += [w["purchase_price"]] * n
+        if w.get("list_price"):
+            si["value"] += [w["list_price"]] * n
+        si["examples"][w["description"]] += n
+
+    def med(xs):
+        return round(statistics.median(xs)) if xs else None
+
+    top = []
+    for key, n in styles.most_common(4):
+        si = style_info[key]
+        top.append({"country": key[0], "area": key[1], "type": key[2], "bottles": n,
+                    "producers": [p for p, _ in si["producers"].most_common(5)],
+                    "grapes": [g for g, _ in si["grapes"].most_common(4)],
+                    "paid_median": med(si["paid"]), "value_median": med(si["value"]),
+                    "examples": [e for e, _ in si["examples"].most_common(3)]})
+
+    # bottles at peak per year with today's stock
+    peak = {yr: 0 for yr in range(y, y + YEARS_AHEAD + 1)}
+    for w in wines:
+        if w["stock"] > 0 and w.get("peak_year_from") is not None:
+            for yr in range(max(y, w["peak_year_from"]), min(y + YEARS_AHEAD, w["peak_year_to"]) + 1):
+                peak[yr] += w["stock"]
+    # how many bottles a year the owner drinks (average of the last three full years, at least 12)
+    outs = dict(con.execute("SELECT CAST(substr(date,1,4) AS INT) yr, SUM(-qty) FROM movement WHERE kind='out' GROUP BY yr").fetchall())
+    recent = [outs.get(yr, 0) for yr in range(y - 3, y)]
+    per_year = max(12, round(sum(recent) / 3)) if any(recent) else 24
+    shortfall = {yr: max(0, per_year - n) for yr, n in peak.items()}
+    # gap periods: runs of years with a shortfall of at least a third of a year's drinking
+    gaps, run = [], []
+    for yr in sorted(shortfall):
+        if shortfall[yr] >= per_year / 3:
+            run.append(yr)
+        elif run:
+            gaps.append(run)
+            run = []
+    if run:
+        gaps.append(run)
+    gaps = [{"from": g[0], "to": g[-1], "missing": sum(shortfall[x] for x in g)} for g in gaps]
+    return {"year": y, "per_year": per_year, "peak_by_year": {str(k): v for k, v in peak.items()},
+            "shortfall": {str(k): v for k, v in shortfall.items()}, "gaps": gaps, "styles": top,
+            "producers": [p for p, _ in producers.most_common(10)], "grapes": [g for g, _ in grapes.most_common(8)]}
+
+
+def _gap_text(gaps, y):
+    if not gaps:
+        return f"the years {y + 4}-{y + 12} (keep the cellar balanced)"
+    return ", ".join(f"{g['from']}-{g['to']}" if g["from"] != g["to"] else str(g["from"]) for g in gaps)
+
+
+def _query(style, an):
+    y = an["year"]
+    budget = style["paid_median"] or 150
+    value = style["value_median"]
+    return "\n".join([
+        "Find wines that are on offer RIGHT NOW in Danish online wine shops (e.g. Vinbanden, Vinspecialisten, Philipson,",
+        "Kjær & Sommerfeldt, Skjold Burne, Supervin, Winther, Fine Wine, Lassen & Wraae, Bichel, Holte Vinlager, wine.dk,",
+        "Vinoble, Barolo.dk, Theis Vine, Kolonihaven, Dansk Vinimport) - real, current discounts, not list prices.",
+        "",
+        f"The buyer likes: {style['type']} wine from {style['area']}, {style['country']}"
+        + (f"; producers such as {', '.join(style['producers'][:4])}" if style["producers"] else "")
+        + (f"; grapes {', '.join(style['grapes'])}" if style["grapes"] else "") + ".",
+        f"Examples from the cellar: {'; '.join(style['examples'])}.",
+        f"The buyer usually pays about {budget} DKK per bottle on offer" + (f" for wines normally around {value} DKK" if value else "")
+        + f". Look for offers up to about {round(budget * 1.6)} DKK per bottle with a clear discount (ideally 25 % or more).",
+        f"The cellar lacks wines that are at their PEAK in {_gap_text(an['gaps'], y)}. Choose wines and vintages whose",
+        "peak (optimal drinking period) falls in those years, based on published drinking windows or the producer's",
+        "and vintage's known ageing potential. Similar wines from neighbouring regions are fine if they fit better.",
+        "",
+        "Give 4 to 6 different wines. Only offers you actually found on a shop page, with the product page URL.",
+        "Return ONLY this JSON, no other text:",
+        '{"offers": [{"wine": str, "producer": str, "vintage": int, "country": str, "region": str, "grapes": str,',
+        ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "normal_price_dkk": number or null,',
+        ' "offer_ends": str or null, "drink_from_year": int, "drink_to_year": int, "peak_from_year": int,',
+        ' "peak_to_year": int, "window_source": str, "why": str}]}',
+    ])
+
+
+def _search(agent, q):
+    resp = ai._ha("POST", "/api/services/conversation/process?return_response",
+                  {"agent_id": agent, "language": "en", "text": q}, timeout=150)
+    r = (resp or {}).get("service_response", {}).get("response", {}) if isinstance(resp, dict) else {}
+    speech = r.get("speech", {}).get("plain", {}).get("speech", "")
+    if r.get("response_type") == "error":
+        raise RuntimeError(speech[:300])
+    data = ai._json_from_text(speech)
+    if not isinstance(data, dict):
+        raise RuntimeError("The search agent did not return JSON.")
+    return data.get("offers") or []
+
+
+def _num(v):
+    try:
+        return float(v) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def clean_offers(offers, an, owned):
+    """Keep plausible offers, compute discount and how well the peak fills the gaps."""
+    y, out, seen = an["year"], [], set()
+    short = {int(k): v for k, v in an["shortfall"].items()}
+    for o in offers:
+        if not isinstance(o, dict):
+            continue
+        url, price = str(o.get("url") or ""), _num(o.get("price_dkk"))
+        if not url.startswith("http") or not price or price <= 0:
+            continue
+        if urllib.parse.urlparse(url).path.strip("/") == "":
+            continue  # a shop's front page is not an offer
+        vint = _int(o.get("vintage"))
+        pf, pt = _int(o.get("peak_from_year")), _int(o.get("peak_to_year"))
+        if pf and pt and (pt < pf or (vint and pf < vint)):
+            pf = pt = None
+        name = str(o.get("wine") or "").strip()
+        k = vocab.key(f"{name}{vint}")
+        if not name or k in seen:
+            continue
+        seen.add(k)
+        normal = _num(o.get("normal_price_dkk"))
+        disc = round((1 - price / normal) * 100) if normal and normal > price else None
+        fit = sum(short.get(yr, 0) for yr in range(pf, pt + 1)) if pf and pt else 0
+        out.append({
+            "wine": name, "producer": o.get("producer") or "", "vintage": vint, "country": o.get("country") or "",
+            "region": o.get("region") or "", "grapes": o.get("grapes") or "", "wine_type": (o.get("wine_type") or "red").lower(),
+            "shop": o.get("shop") or urllib.parse.urlparse(url).hostname, "url": url, "price_dkk": round(price),
+            "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc, "offer_ends": o.get("offer_ends"),
+            "drink_from_year": _int(o.get("drink_from_year")), "drink_to_year": _int(o.get("drink_to_year")),
+            "peak_from_year": pf, "peak_to_year": pt, "window_source": o.get("window_source") or "",
+            "why": o.get("why") or "", "fit": fit, "style": o.get("_style"),
+            "owned": owned.get(vocab.key(name)) or owned.get(vocab.key(f"{o.get('producer')}{vint}")),
+        })
+    out.sort(key=lambda r: (-(r["fit"] > 0), -r["fit"], -(r["discount_pct"] or 0)))
+    return out
+
+
+def status():
+    with _lock:
+        return dict(_state)
+
+
+def last(con):
+    row = con.execute("SELECT value FROM meta WHERE key='recommendations'").fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def run(enrich):
+    con = db.connect()
+    try:
+        agent = ai.search_entity()
+        if not agent:
+            raise RuntimeError("No web search agent found. Add a Gemini conversation agent with Google Search "
+                               "(entity id containing 'search') or set 'search_agent_entity' in the app configuration.")
+        an = analysis(con, enrich)
+        styles = an["styles"][:3]
+        owned = {}
+        for w in _wines(con):
+            owned[vocab.key(w["description"])] = w["id"]
+            if w.get("producer") and w.get("vintage"):
+                owned.setdefault(vocab.key(f"{w['producer']}{w['vintage']}"), w["id"])
+        offers, errors = [], []
+        for i, st in enumerate(styles):
+            if _cancel.is_set():
+                break
+            label = f"{st['type']} {st['area']}"
+            with _lock:
+                _state.update(stage=f"searching offers: {label} ({i + 1}/{len(styles)})")
+            try:
+                for o in _search(agent, _query(st, an)):
+                    if isinstance(o, dict):
+                        o["_style"] = label
+                        offers.append(o)
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{label}: {str(e)[:160]}")
+        result = {"created": time.strftime("%Y-%m-%d %H:%M"), "analysis": an, "offers": clean_offers(offers, an, owned),
+                  "errors": errors, "agent": agent}
+        with db.lock():
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('recommendations', ?)", (json.dumps(result, ensure_ascii=False),))
+        with _lock:
+            _state.update(status="cancelled" if _cancel.is_set() else "done", stage=None, finished=time.time())
+    except Exception as e:  # noqa: BLE001
+        with _lock:
+            _state.update(status="error", error=str(e)[:300], stage=None, finished=time.time())
+    finally:
+        con.close()
+
+
+def start(enrich):
+    with _lock:
+        if _state.get("status") == "running":
+            raise ValueError("A search is already running.")
+        _state.clear()
+        _state.update(status="running", stage="starting", started=time.time())
+    _cancel.clear()
+    threading.Thread(target=run, args=(enrich,), daemon=True).start()
+
+
+def cancel():
+    _cancel.set()

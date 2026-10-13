@@ -352,3 +352,25 @@ h3.sub3 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .hb.st-peak .t { background: #2e7d6b; } .hb.st-ready .t { background: var(--ready); }
 .hb.st-young .t { background: var(--young); } .hb.st-unknown .t { background: var(--muted); }
 @media (prefers-color-scheme: dark) { .hb.st-peak .t { background: #6fd1b5; } }
+
+/* 1.15: offers (recommendations) */
+.recs-top { margin-bottom: 16px; }
+.hbars.target { position: relative; }
+.hb.gap .t { background: var(--now); }
+.styles { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.styles b { text-transform: capitalize; }
+.offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.offer { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.offer p { margin: 0; }
+.offer .row { margin: 4px 0 0; margin-top: auto; }
+.ohead { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.oprice { text-align: right; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; }
+.oprice b { font: 600 20px var(--serif); }
+.oprice s { color: var(--muted); font-size: 13px; }
+.disc { font-size: 12px; font-weight: 700; color: var(--ready); }
+.otags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.otags .chip { margin-left: 0; }
+a.btn { text-decoration: none; }
+@media (max-width: 560px) { .offers { grid-template-columns: 1fr; } }
+.tabs button { white-space: nowrap; flex: none; }
+@media (max-width: 560px) { .tabs { scrollbar-width: none; } .tabs button { padding: 8px 10px; } }

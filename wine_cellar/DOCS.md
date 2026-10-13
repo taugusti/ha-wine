@@ -78,6 +78,17 @@ a link to the review and a **Search** link (a Google search on the critic's site
 knows a published score for that exact vintage; check it with the link. Scores are shown as badges in the wine list.
 The critics' own sites require a subscription, so scores cannot be fetched from them automatically.
 
+## Offers
+
+The **Offers** tab compares how many of today's bottles are at their peak each year with how many bottles you drink
+a year (average of the last three years). Years below that are **peak gaps**. It also shows the styles you buy most
+(country, area and type, weighted by bottles bought) with your usual price and the wines' value.
+
+**Find offers** asks the web search agent for current offers in Danish wine shops in your top three styles, around
+your usual price and with a clear discount, whose peak falls in the gap years. Offers are sorted by how much of the
+gaps they fill, then by discount. Check the price at the shop before you buy: the results come from a web search.
+**Add to cellar** opens a new wine with the details, price, value and drinking window filled in.
+
 ## Review
 
 Suggested changes to values you already have, for example a new drinking window from a bulk review, are listed under

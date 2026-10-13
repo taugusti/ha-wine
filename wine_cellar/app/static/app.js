@@ -814,6 +814,7 @@ function showTab(name) {
   if (name === "stats") renderStats();
   if (name === "data") { renderMeta(); renderCleanup(); }
   if (name === "review") renderReview();
+  if (name === "recs") renderRecs();
 }
 
 // ------------------------------------------------------------- statistics
@@ -886,6 +887,76 @@ async function doImport(dry) {
     if (!dry) { await refresh(); renderMeta(); }
   } catch (e) { $("#impResult").innerHTML = `<p class="err">Error: ${esc(e.message)}</p>`; }
 }
+// ------------------------------------------------------------- recommendations (offers that fill the peak gaps)
+let recsTimer = null, recsOffers = [];
+async function renderRecs() {
+  const el = $("#tab-recs");
+  let r;
+  try { r = await api("api/ai/recs"); } catch (e) { el.innerHTML = `<div class="panel wide"><p class="err">${esc(e.message)}</p></div>`; return; }
+  const an = r.analysis, st = r.state || {}, last = r.last, run = st.status === "running";
+  recsOffers = last?.offers || [];
+  const maxN = Math.max(an.per_year, ...Object.values(an.peak_by_year));
+  const gapYears = new Set(an.gaps.flatMap((g) => Array.from({ length: g.to - g.from + 1 }, (_, i) => g.from + i)));
+  const peakRows = Object.entries(an.peak_by_year).map(([y, n]) => `<div class="hb ${gapYears.has(Number(y)) ? "gap" : "st-peak"}">
+      <span>${y}</span><span class="t" style="width:${(n / maxN) * 100}%"></span><span class="n">${n}</span></div>`).join("");
+  const gapTxt = an.gaps.length ? an.gaps.map((g) => (g.from === g.to ? g.from : `${g.from}–${g.to}`)).join(", ") : "none";
+  el.innerHTML = `
+    <div class="sgrid recs-top">
+      <div class="panel"><h2>Peak gaps</h2>
+        <p class="small muted">You drink about <b>${an.per_year}</b> bottles a year. Years where fewer of today's bottles are at peak than that are marked as gaps.</p>
+        <div class="hbars target" style="--target:${(an.per_year / maxN) * 100}%">${peakRows}</div>
+        <p class="small">Gaps: <b>${esc(gapTxt)}</b></p></div>
+      <div class="panel"><h2>What you buy most</h2>
+        <ul class="styles">${an.styles.map((x) => `<li><b>${esc(x.type)} · ${esc(x.area)}</b> <span class="muted">${x.area !== x.country ? esc(x.country) + " · " : ""}${x.bottles} bottles</span>
+          <div class="small muted">${[esc(x.producers.slice(0, 3).join(", ")), x.paid_median ? `usually paid ${kr(x.paid_median)}${x.value_median ? `, value ${kr(x.value_median)}` : ""}` : ""].filter(Boolean).join(" · ")}</div></li>`).join("")}</ul>
+      </div>
+      <div class="panel"><h2>Find offers</h2>
+        <p class="small muted">Searches Danish wine shops for current offers in your top ${Math.min(3, an.styles.length)} styles, with a peak in the gap years. It uses the web search agent in Home Assistant and takes a few minutes.</p>
+        <div class="row">${run ? `<span><span class="spin"></span> ${esc(st.stage || "searching")} …</span><button class="btn" id="recsStop">Stop</button>`
+          : `<button class="btn primary" id="recsGo">🔎 Find offers</button>`}</div>
+        ${st.status === "error" ? `<p class="err small">${esc(st.error)}</p>` : ""}
+        ${last ? `<p class="small muted">Last search: ${esc(last.created)}${last.errors?.length ? ` · ${last.errors.length} searches failed` : ""}</p>` : ""}
+        ${last?.errors?.length ? `<details class="small"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
+      </div>
+    </div>
+    ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>
+      <p class="small muted">Prices and offers come from a web search and can be outdated or wrong. Check the price at the shop before you buy.</p>`
+      : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}`;
+  clearTimeout(recsTimer);
+  if (run && $("#tab-recs").classList.contains("on")) recsTimer = setTimeout(renderRecs, 4000);
+}
+function offerCard(o, i) {
+  const peak = o.peak_from_year ? (o.peak_from_year === o.peak_to_year ? o.peak_from_year : `${o.peak_from_year}–${o.peak_to_year}`) : null;
+  return `<div class="panel offer">
+    <div class="ohead"><div><div class="wname">${esc(o.wine)}${o.vintage && !String(o.wine).includes(o.vintage) ? " " + o.vintage : ""}</div>
+      <div class="sub">${esc([o.producer, o.region, o.country].filter(Boolean).join(" · "))}</div></div>
+      <div class="oprice"><b>${kr(o.price_dkk)}</b>${o.normal_price_dkk ? `<s>${kr(o.normal_price_dkk)}</s>` : ""}${o.discount_pct ? `<span class="disc">−${o.discount_pct}%</span>` : ""}</div></div>
+    <div class="otags">${peak ? `<span class="chip s-peak">Peak ${peak}</span>` : ""}${o.fit ? '<span class="chip s-ready">Fills a gap</span>' : ""}
+      ${o.owned ? '<span class="chip s-now">Already in cellar</span>' : ""}${o.style ? `<span class="tag">${esc(o.style)}</span>` : ""}</div>
+    ${o.why ? `<p class="small">${esc(o.why)}</p>` : ""}
+    <p class="small muted">${o.drink_from_year ? `Drink ${o.drink_from_year}–${o.drink_to_year}` : ""}${o.window_source ? ` · ${esc(o.window_source)}` : ""}${o.offer_ends ? ` · offer ends ${esc(o.offer_ends)}` : ""}</p>
+    <div class="row"><a class="btn primary" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)} ↗</a>
+      ${o.owned ? `<button class="btn" data-openw="${o.owned}">Open in cellar</button>` : `<button class="btn" data-addoffer="${i}">Add to cellar</button>`}</div>
+  </div>`;
+}
+$("#tab-recs").addEventListener("click", async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  try {
+    if (b.id === "recsGo") { await send("api/ai/recs", "POST", {}); renderRecs(); }
+    else if (b.id === "recsStop") { await send("api/ai/recs/cancel", "POST", {}); setTimeout(renderRecs, 1000); }
+    else if (b.dataset.openw) openWine(b.dataset.openw);
+    else if (b.dataset.addoffer != null) {
+      const o = recsOffers[Number(b.dataset.addoffer)], v = o.vintage;
+      const age = (yr) => (yr && v ? yr - v : "");
+      openWine(null, { description: `${o.wine}${v && !String(o.wine).includes(v) ? " " + v : ""}`, producer: o.producer, vintage: v || "",
+        country: o.country, region: o.region, grapes: o.grapes, wine_type: o.wine_type || "red", shop: o.shop, link: o.url,
+        purchase_price: o.price_dkk, list_price: o.normal_price_dkk || o.price_dkk,
+        drink_from_age: age(o.drink_from_year), drink_to_age: age(o.drink_to_year), peak_from_age: age(o.peak_from_year), peak_to_age: age(o.peak_to_year),
+        window_basis: o.window_source || "" });
+    }
+  } catch (err) { toast("Error: " + err.message); }
+});
+
 // ------------------------------------------------------------- review proposals
 const FLABEL = { drink_from_age: "Drink from (yrs after vintage)", drink_to_age: "Drink until (yrs after vintage)",
   peak_from_age: "Peak from (yrs after vintage)", peak_to_age: "Peak until (yrs after vintage)", window_basis: "Window based on", advice: "Drinking advice",
