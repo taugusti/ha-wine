@@ -24,6 +24,7 @@ from importer import run_import
 import ai
 import vocab
 import proposals
+import bulk
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 def _version():
@@ -293,6 +294,13 @@ class H(BaseHTTPRequestHandler):
     def dispatch_ai(self, method, path):
         if path == "/api/ai/status":
             return self.send(200, {"entity": ai.ai_entity()})
+        if path == "/api/ai/bulk":
+            if method == "POST":
+                bulk.start(only_missing=bool(self.json_body().get("only_missing", True)))
+            return self.send(200, bulk.status())
+        if path == "/api/ai/bulk/cancel" and method == "POST":
+            bulk.cancel()
+            return self.send(200, bulk.status())
         if path == "/api/ai/lookup" and method == "POST":
             # runs in the background: a lookup can take longer than the ingress/Nabu Casa proxy waits
             return self.send(202, {"job": start_lookup(self.json_body())})

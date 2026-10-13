@@ -1,3 +1,6 @@
+# 1.11.0
+- New "✨ AI review of the cellar" on the Review page: looks up all wines in stock without a peak in the background and adds drinking window and peak suggestions for review (and fills empty critic scores). Shows progress, can be stopped, and waits and retries when the AI quota is used up.
+
 # 1.10.0
 - The wine list shows the peak period instead of the drinking window (the window is shown in small text below) and is sorted by the end of the peak period by default.
 - Wines without a peak get an estimated peak from their drinking window (about 30–80 % into the window), marked "peak estimated" and shown as a dashed band, until a real peak is set.

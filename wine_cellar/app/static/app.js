@@ -821,6 +821,13 @@ async function renderReview() {
       <p>${pend.length ? `${pend.length} suggestions change values you already have. You can adjust a value before you accept it.` : "Nothing to review."}</p>
       ${pend.length > 1 ? '<div class="row"><button class="btn" id="accAll">Accept all</button></div>' : ""}
     </div>
+    <div class="panel wide" id="bulkPanel">
+      <h3 class="sm">✨ AI review of the cellar</h3>
+      <p class="small muted">Looks up every wine in stock without its own peak (AI + web search, about a minute per wine) and
+        adds drinking window and peak suggestions here. Empty critic scores are filled in directly. It runs in Home Assistant,
+        so you can close the app meanwhile.</p>
+      <div id="bulkStatus" class="small"></div>
+    </div>
     ${pend.map((p) => `<div class="panel wide prop" data-pid="${p.id}">
       <div class="phead"><a href="#" data-openw="${p.wine_id}" class="wname">${esc(p.description)}</a><span class="tag">${esc(p.topic || "")}</span></div>
       <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggested</th></tr></thead><tbody>
@@ -836,6 +843,30 @@ async function renderReview() {
         ${Object.entries(p.changes).filter(([k]) => !k.endsWith("_url")).map(([k, v]) => `${FLABEL[k] || k} ${esc(v)}`).join(", ")}
         ${p.sources.length ? `<a href="${esc(p.sources[0])}" target="_blank" rel="noopener">source</a>` : ""}</li>`).join("")}</ul></details></div>` : ""}`;
   updateReviewCount();
+  bulkSeen = null;
+  renderBulk();
+}
+
+let bulkTimer = null, bulkSeen = null;
+async function renderBulk() {
+  const el = $("#bulkStatus"); if (!el) return;
+  let st;
+  try { st = await api("api/ai/bulk"); } catch (e) { el.textContent = "AI review status unavailable: " + e.message; return; }
+  const run = st.status === "running";
+  const head = run ? `<b>Running:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
+      (st.errors ? ` · ${st.errors} errors` : "") + (st.current ? `<br><span class="muted">Now: ${esc(st.current)}</span>` : "")
+    : st.status === "idle" ? ""
+    : `<b>${st.status === "done" ? "Finished" : st.status === "cancelled" ? "Cancelled" : "Stopped"}:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
+      (st.errors ? ` · ${st.errors} errors` : "") + (st.error ? ` · ${esc(st.error)}` : "");
+  if (bulkSeen == null) bulkSeen = st.suggested ?? 0;
+  const newer = (st.suggested ?? 0) > bulkSeen;
+  el.innerHTML = `${head ? `<p>${head}</p>` : ""}
+    <div class="row">${run ? '<button class="btn" id="bulkCancel">Stop</button>' : '<button class="btn primary" id="bulkStart">Start AI review</button>'}
+      ${newer ? '<button class="btn" id="bulkShow">Show new suggestions</button>' : ""}</div>
+    ${st.log && st.log.length ? `<details><summary class="muted">Log</summary><pre class="small">${esc(st.log.join("\n"))}</pre></details>` : ""}`;
+  updateReviewCount();
+  clearTimeout(bulkTimer);
+  if (run && $("#tab-review").classList.contains("on")) bulkTimer = setTimeout(renderBulk, 5000);
 }
 $("#tab-review").addEventListener("click", async (e) => {
   const a = e.target.closest("[data-openw]");
@@ -850,6 +881,12 @@ $("#tab-review").addEventListener("click", async (e) => {
   try {
     if (b.dataset.acc) await decide(b.dataset.acc, true);
     else if (b.dataset.rej) await decide(b.dataset.rej, false);
+    else if (b.id === "bulkStart") {
+      if (!confirm("Look up all wines in stock without a peak? It takes about a minute per wine.")) return;
+      await send("api/ai/bulk", "POST", { only_missing: true }); bulkSeen = 0; renderBulk(); return;
+    }
+    else if (b.id === "bulkCancel") { await send("api/ai/bulk/cancel", "POST", {}); setTimeout(renderBulk, 1500); return; }
+    else if (b.id === "bulkShow") { renderReview(); return; }
     else if (b.id === "accAll") { if (!confirm("Accept all suggestions?")) return; for (const c of $$(".prop")) await decide(c.dataset.pid, true); }
     else return;
     await refresh(); renderReview();

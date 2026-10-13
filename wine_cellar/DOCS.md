@@ -85,6 +85,12 @@ Suggested changes to values you already have, for example a new drinking window 
 value before you accept it, or reject it. Empty fields, such as critic scores, are filled in directly and listed at
 the bottom of the page with their source.
 
+**✨ AI review of the cellar** (on the Review page) looks up every wine in stock that has no peak of its own, using the
+AI and the web search (about a minute per wine). It runs inside Home Assistant, so you can close the app meanwhile, and
+waits and retries when the AI's free quota is used up. Drinking window and peak suggestions are added for review; a
+window that only differs by a year from yours is kept, and only the peak is suggested. Empty critic scores with a link
+to the review are filled in directly.
+
 ## Drinking window
 
 The window is given in years after vintage, as in Excel. A wine can also have a **peak** window (when it is at its
