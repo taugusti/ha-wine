@@ -33,6 +33,18 @@ with the photos. The app:
    warns you when it is not sure it found the right wine. Tick the suggestions you want, press **Apply selected**,
    then save.
 
+### Web search (prices and critic scores)
+
+The AI Task cannot search the web. If you add a conversation agent with web search, Smart fill uses it as a second
+step: once the wine is identified, the agent searches for Danish shop prices (one bottle, excl. shipping) and
+published Wine Advocate, Wine Spectator and James Suckling scores. Found values replace the AI's guesses, and the
+sources are shown as links above the suggestions.
+
+With Google Gemini: Settings → Devices & services → Google Generative AI → **Add conversation agent**, name it e.g.
+"Wine search", set "Control Home Assistant" to none, untick "Recommended model settings", choose a model your API
+quota allows with search (`gemini-2.5-flash` works on the free tier) and enable **Enable Google Search tool**.
+The app finds an agent whose entity ID contains "search" automatically, or set `search_agent_entity`.
+
 Smart fill also suggests an **estimated price** for one bottle in DKK, excluding shipping (a typical Danish shop
 price). Enter the **actual purchase price** yourself.
 
@@ -95,6 +107,8 @@ The app keeps these sensors updated:
 
 - `ai_task_entity` (optional): the AI Task entity used by Smart fill, e.g. `ai_task.google_ai_task`.
   Empty means the first AI Task entity found.
+- `search_agent_entity` (optional): conversation agent with web search, e.g. `conversation.wine_search`.
+  Empty means an agent whose entity ID contains "search"; `none` turns the web search step off.
 
 ## Data and backup
 

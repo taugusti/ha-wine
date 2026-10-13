@@ -77,6 +77,98 @@ def ai_entity():
     return None
 
 
+def search_entity():
+    """Conversation agent with web search (e.g. a Gemini agent with Google Search enabled), if configured.
+    App option 'search_agent_entity'; otherwise an agent whose entity_id contains 'search'."""
+    ent = (_options().get("search_agent_entity") or "").strip()
+    if ent:
+        return None if ent.lower() in ("none", "off") else ent
+    try:
+        for s in _ha("GET", "/api/states"):
+            if s["entity_id"].startswith("conversation.") and "search" in s["entity_id"]:
+                return s["entity_id"]
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _json_from_text(t):
+    t = (t or "").strip()
+    m = re.search(r"\{.*\}", t, re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except ValueError:
+        return None
+
+
+def web_search(agent, s):
+    """Ask the search agent for current Danish price and published critic scores for the identified wine."""
+    name = s.get("description") or ""
+    if s.get("vintage") and str(s["vintage"]) not in name:
+        name += f" {s['vintage']}"
+    bits = [f"Wine: {name}"]
+    for k, label in (("producer", "Producer"), ("region", "Region"), ("size_cl", "Bottle size (cl)")):
+        if s.get(k):
+            bits.append(f"{label}: {s[k]}")
+    q = "\n".join([
+        "Search the web for this exact wine and vintage.", *bits, "",
+        "1. Find current prices in Danish wine shops for ONE bottle of this size (DKK incl. VAT, excluding shipping",
+        "   and quantity discounts). If no Danish shop has it, use other European shops and convert to DKK.",
+        "2. Find published scores for this exact vintage from Robert Parker Wine Advocate, Wine Spectator and",
+        "   James Suckling, with the URL of the page where you found each score (the critic's own page or a shop page",
+        "   quoting it). Only scores you actually found; never estimate.",
+        "3. Any drinking window stated by a critic or the producer.",
+        "Return ONLY this JSON, no other text:",
+        '{"price_dkk": number or null, "price_note": "e.g. median of 3 Danish shops" or null,',
+        ' "price_sources": [{"shop": str, "price_dkk": number, "url": str}],',
+        ' "rp_score": str or null, "rp_url": str or null, "ws_score": str or null, "ws_url": str or null,',
+        ' "js_score": str or null, "js_url": str or null,',
+        ' "critic_window": str or null, "critic_window_source": str or null}',
+    ])
+    resp = _ha("POST", "/api/services/conversation/process?return_response",
+               {"agent_id": agent, "language": "en", "text": q}, timeout=120)
+    r = (resp or {}).get("service_response", {}).get("response", {}) if isinstance(resp, dict) else {}
+    speech = r.get("speech", {}).get("plain", {}).get("speech", "")
+    if r.get("response_type") == "error":
+        raise RuntimeError(speech[:300])
+    data = _json_from_text(speech)
+    if not isinstance(data, dict):
+        raise RuntimeError("The search agent did not return JSON.")
+    return data
+
+
+def merge_search(s, w):
+    """Put web search results into the suggestion. Found facts win over the AI's own knowledge."""
+    found = {"sources": []}
+    price = w.get("price_dkk")
+    try:
+        price = float(price) if price not in (None, "") else None
+    except (TypeError, ValueError):
+        price = None
+    if price and price > 0:
+        s["list_price"] = int(round(price))
+        found["price_note"] = w.get("price_note")
+        if "list_price" in s.get("uncertain_fields", []):
+            s["uncertain_fields"].remove("list_price")
+    for p in w.get("price_sources") or []:
+        if isinstance(p, dict) and str(p.get("url", "")).startswith("http"):
+            found["sources"].append({"label": f"{p.get('shop') or 'Shop'}: {p.get('price_dkk')} DKK", "url": p["url"]})
+    for k in ("rp", "ws", "js"):
+        sc = w.get(f"{k}_score")
+        if sc not in (None, "", "null"):
+            s[f"{k}_score"] = str(sc)
+            u = w.get(f"{k}_url")
+            ok = u and str(u).startswith("http") and urllib.parse.urlparse(str(u)).path.strip("/") != ""
+            s[f"{k}_url"] = u if ok else None
+            if ok:
+                found["sources"].append({"label": f"{k.upper()} {sc}", "url": u})
+    if w.get("critic_window"):
+        found["critic_window"] = w["critic_window"] + (f" ({w['critic_window_source']})" if w.get("critic_window_source") else "")
+    return found
+
+
 def barcode_info(code):
     code = re.sub(r"\D", "", code or "")
     if len(code) < 8 or code.startswith("999888777"):
@@ -232,7 +324,13 @@ def lookup(con, text, barcode, current=None, photos=None, photo_labels=None):
     s["uncertain_fields"] = [f.strip() for f in re.split(r"[,;\s]+", s.get("uncertain_fields") or "") if f.strip() in STRUCTURE]
     if saved and not (current or {}).get("photo"):
         s["photo"] = saved[0][0]
-    return {"suggestion": s, "barcode_info": binfo, "entity": entity,
+    search = {"agent": search_entity()}
+    if search["agent"] and (s.get("description") or s.get("producer")):
+        try:
+            search.update(merge_search(s, web_search(search["agent"], s)))
+        except Exception as e:  # noqa: BLE001 - the lookup still works without web search
+            search["error"] = str(e)[:300]
+    return {"suggestion": s, "barcode_info": binfo, "entity": entity, "search": search,
             "existing": find_existing(con, s, barcode, (current or {}).get("id"))}
 
 

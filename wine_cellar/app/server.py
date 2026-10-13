@@ -171,7 +171,7 @@ def changed():
 
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
-    server_version = "WineCellar/1.5"
+    server_version = "WineCellar/1.6"
 
     def log_message(self, fmt, *args):
         if os.environ.get("WINE_DEBUG"):

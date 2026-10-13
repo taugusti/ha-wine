@@ -1,3 +1,9 @@
+# 1.6.0
+- Web search step: after the wine is identified, a Home Assistant conversation agent with web search (e.g. a Gemini
+  agent with "Enable Google Search tool") looks up Danish prices for one bottle and published critic scores, with links.
+  Found prices and scores replace the AI's own guesses; sources are shown with the suggestions.
+- New option `search_agent_entity` (default: a conversation agent whose entity ID contains "search"; "none" turns it off).
+
 # 1.5.0
 - Two photo buttons: front label (starts the lookup) and back label (updates the lookup with grapes, barcode etc.).
 - Smart fill suggests an estimated price for one bottle (DKK, excl. shipping) in "Estimated price".

@@ -229,7 +229,7 @@ async function openWine(id, preset = {}) {
           <div class="pslot" id="slot-front"></div>
           <div class="pslot" id="slot-back"></div>
         </div>
-        <p class="muted small">Take a photo of the front label; the lookup starts by itself. Add the back label (grapes, barcode) and the lookup is updated. It uses ${esc(aiEntity)} in Home Assistant. Invoice text and barcode are optional extras${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
+        <p class="muted small">Take a photo of the front label; the lookup starts by itself. Add the back label (grapes, barcode) and the lookup is updated. It uses ${esc(aiEntity)} in Home Assistant, plus a web search agent for prices and critic scores if you have one. Invoice text and barcode are optional extras${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
         <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
         <div class="row">
           <input type="text" id="aiBarcode" placeholder="Barcode" value="${esc(w.barcode ?? "")}">
@@ -377,7 +377,7 @@ async function aiLookup() {
   if (!text && !barcode && !slots.length && !current.id) { toast("Take a photo, paste invoice text or enter a barcode"); return; }
   if (aiLookup.busy) { aiLookup.again = true; return; }
   aiLookup.busy = true;
-  btn.disabled = true; st.textContent = `Looking up${slots.length ? ` the ${slots.length === 2 ? "photos" : "photo"}` : ""} … (can take 10–40 seconds)`; $("#aiResult").innerHTML = "";
+  btn.disabled = true; st.textContent = `Looking up${slots.length ? ` the ${slots.length === 2 ? "photos" : "photo"}` : ""} … (can take up to a minute with web search)`; $("#aiResult").innerHTML = "";
   try {
     const r = await send("api/ai/lookup", "POST", { text, barcode, photos: slots.map((k) => aiPhotos[k]), photo_labels: slots.map((k) => SLOTS[k].toLowerCase()),
       wine_id: current.id || null, current: current.id ? null : formData() });
@@ -394,13 +394,19 @@ async function aiLookup() {
       <b>⚠ ${conf === "low" ? "The AI is not sure it identified the right wine." : unsure.size ? "The AI is unsure about some details." : "Please check the suggestions."}</b>
       ${r.suggestion.uncertainty_note ? `<div>${esc(r.suggestion.uncertainty_note)}</div>` : ""}
       ${unsure.size ? `<div class="small">Marked with ⚠ below: ${[...unsure].map((k) => (SUGG_FIELDS.find(([f]) => f === k) || [k, k])[1]).join(", ")}.</div>` : ""}</div>` : "";
+    const sr = r.search || {};
+    const web = sr.agent ? `<div class="websearch small">
+      ${sr.error ? `<b>Web search failed</b> (${esc(sr.agent)}): ${esc(sr.error)}. The suggestions below are based on the AI's own knowledge.`
+        : `<b>Web search</b> (${esc(sr.agent)})${sr.price_note ? ` · price: ${esc(sr.price_note)}` : ""}${sr.critic_window ? ` · critic drinking window: ${esc(sr.critic_window)}` : ""}
+           ${(sr.sources || []).length ? `<div>${sr.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join(" · ")}</div>` : "<div class=\"muted\">No price or critic scores found online.</div>"}`}
+      </div>` : "";
     if (r.suggestion.photo) { const ph = $('#drawer [name="photo"]'); if (ph && !ph.value) ph.value = r.suggestion.photo; }
     const ex = (r.existing || []).length ? `<div class="exist"><b>This wine may already be in your cellar:</b>
       ${r.existing.map((x) => `<div>${esc(x.description)} <span class="muted">(${x.stock} in stock, ${esc(x.reason)})</span>
         <button type="button" class="btn" data-openwine="${x.id}">Open it</button></div>`).join("")}
       <span class="muted small">To add bottles to an existing wine, open it and use "In".</span></div>` : "";
-    if (!rows.length) { $("#aiResult").innerHTML = doubt + ex + '<p class="muted small">No new information found.</p>'; return; }
-    $("#aiResult").innerHTML = doubt + ex + `<table class="sugg"><thead><tr><th></th><th>Field</th><th>Now</th><th>Suggestion</th></tr></thead><tbody>
+    if (!rows.length) { $("#aiResult").innerHTML = doubt + web + ex + '<p class="muted small">No new information found.</p>'; return; }
+    $("#aiResult").innerHTML = doubt + web + ex + `<table class="sugg"><thead><tr><th></th><th>Field</th><th>Now</th><th>Suggestion</th></tr></thead><tbody>
       ${rows.map(([k, l]) => { const c = cur(k); const pre = isNew || c === "" || (k.endsWith("_score") || k.endsWith("_url")) && !c;
         const u = unsure.has(k);
         return `<tr class="${u ? "unsure" : ""}"><td><input type="checkbox" data-sk="${k}" ${pre ? "checked" : ""}></td><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${esc(c)}</td><td>${esc(r.suggestion[k])}</td></tr>`; }).join("")}
