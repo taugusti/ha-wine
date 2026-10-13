@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wine Cellar</title>
-<link rel="icon" href="static/glass.svg" type="image/svg+xml">
-<link rel="stylesheet" href="static/style.css?v={{VERSION}}">
+<link rel="icon" href="wc/glass.svg?v={{VERSION}}" type="image/svg+xml">
+<link rel="stylesheet" href="wc/style.css?v={{VERSION}}">
 </head>
 <body>
 <header class="top">
@@ -115,6 +115,15 @@
 <div class="ask" id="ask" hidden></div>
 <div class="toast" id="toast" role="status"></div>
 
-<script src="static/app.js?v={{VERSION}}"></script>
+<script>
+  // boot check: tells the app log which version the page loaded and whether app.js actually ran
+  window.WC_PAGE_VERSION = "{{VERSION}}";
+  setTimeout(function () {
+    if (window.WC_APP_VERSION === window.WC_PAGE_VERSION) return;
+    try { fetch("api/ai/client-log", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "boot", msg: "app.js version " + (window.WC_APP_VERSION || "none") + " on page " + window.WC_PAGE_VERSION, ua: navigator.userAgent }) }); } catch (e) {}
+  }, 4000);
+</script>
+<script src="wc/app.js?v={{VERSION}}"></script>
 </body>
 </html>

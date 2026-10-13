@@ -6,6 +6,7 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const fold = (s) => String(s ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const kr = (n) => n == null ? "" : Math.round(n).toLocaleString("en-GB") + " DKK";
 const LOADED_VERSION = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([^&]+)/) || [])[1] || "";
+window.WC_APP_VERSION = LOADED_VERSION;
 // report browser errors to the app log (Settings → Apps → Wine Cellar → Log)
 function clientLog(kind, msg, extra = {}) {
   try {
@@ -809,7 +810,7 @@ async function scanned(code, fromCamera = false) {
 }
 
 // ---- camera barcode scanner: the browser's BarcodeDetector when it has one, otherwise ZXing (loaded on first use)
-const ZXING_SRC = ["static/vendor/zxing.min.js", "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"];
+const ZXING_SRC = ["wc/vendor/zxing.min.js", "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"];
 async function loadZXing() {
   for (const src of ZXING_SRC) {
     if (window.ZXing) break;

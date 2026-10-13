@@ -366,7 +366,7 @@ class H(BaseHTTPRequestHandler):
     def dispatch(self, method, path, q):
         c = db.con()
         if method == "GET" and not path.startswith("/api/"):
-            name = "index.html" if path in ("/", "") else path.lstrip("/").removeprefix("static/")
+            name = "index.html" if path in ("/", "") else re.sub(r"^(static|wc)/", "", path.lstrip("/"))
             f = os.path.normpath(os.path.join(STATIC, name))
             if not f.startswith(STATIC) or not os.path.isfile(f):
                 return self.send(404, {"error": "not found"})

@@ -1,3 +1,6 @@
+# 1.17.0
+- App files are served from a new path (wc/ instead of static/), so the Home Assistant frontend cache can no longer hand out an old app.js. The page also reports to the app log if the app code did not load.
+
 # 1.16.3
 - Browser errors and tab rendering problems are written to the app log, to make problems easier to find.
 
