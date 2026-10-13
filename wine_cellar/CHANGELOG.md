@@ -1,3 +1,6 @@
+# 1.16.2
+- New wine glass icon: in the app header, as the browser icon and as the app icon in Home Assistant.
+
 # 1.16.1
 - Statistics, Offers and Review never stay blank: if a page cannot be shown, the error and a Reload button are shown instead.
 
