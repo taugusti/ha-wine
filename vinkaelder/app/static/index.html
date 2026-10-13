@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vinkælder</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark" aria-hidden="true"></span>Vinkælder</div>
+  <nav class="tabs" role="tablist">
+    <button data-tab="list" class="on">Vine</button>
+    <button data-tab="stats">Statistik</button>
+    <button data-tab="data">Import &amp; eksport</button>
+  </nav>
+  <button class="btn primary" id="newWine">+ Ny vin</button>
+</header>
+
+<main>
+  <section id="tab-list" class="tab on">
+    <div class="toolbar">
+      <div class="search">
+        <input id="q" type="search" placeholder="Søg i vin, producent, område, drue … eller scan stregkode" autocomplete="off">
+        <button class="btn icon" id="camBtn" hidden title="Scan med kamera">⌁</button>
+      </div>
+      <select id="fCountry"><option value="">Alle lande</option></select>
+      <select id="fStatus">
+        <option value="">Alle drikkestatus</option>
+        <option value="over">Overskredet</option>
+        <option value="now">Drik snart (i år/næste år)</option>
+        <option value="ready">Klar</option>
+        <option value="young">For ung</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="fAll"> Vis udsolgte</label>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr>
+          <th data-k="description">Vin</th>
+          <th data-k="vintage" class="num">Årgang</th>
+          <th data-k="region">Område</th>
+          <th data-k="grapes" class="hide-md">Druer</th>
+          <th data-k="stock" class="num">Antal</th>
+          <th data-k="drink_year_to">Drikkevindue</th>
+          <th data-k="list_price" class="num hide-md">Pris</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-stats" class="tab"></section>
+
+  <section id="tab-data" class="tab">
+    <div class="panel">
+      <h2>Import fra Excel</h2>
+      <p>Vælg din <code>vindatabase.xlsm</code>. Vine matches på stregkode (ellers beskrivelse + årgang) og opdateres. Alle bevægelser fra fanen <em>Lager</em> erstattes, så importen kan køres igen og igen, så længe Excel er din primære database.</p>
+      <p id="metaInfo" class="muted"></p>
+      <div class="row">
+        <input type="file" id="xfile" accept=".xlsm,.xlsx">
+        <label class="chk"><input type="checkbox" id="dropApp"> Slet bevægelser registreret i appen</label>
+      </div>
+      <div class="row">
+        <button class="btn" id="dryBtn">Forhåndsvis</button>
+        <button class="btn primary" id="impBtn">Importér</button>
+      </div>
+      <div id="impResult"></div>
+    </div>
+    <div class="panel">
+      <h2>Eksport</h2>
+      <p>Databasen kommer med i Home Assistants backup. Her kan du også hente dataene direkte.</p>
+      <div class="row">
+        <a class="btn" href="api/export.csv">Vine som CSV (Excel)</a>
+        <a class="btn" href="api/export.json">Fuld backup (JSON)</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+
+<div class="cam" id="cam" hidden>
+  <video id="camVideo" playsinline muted></video>
+  <button class="btn" id="camClose">Luk</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="static/app.js"></script>
+</body>
+</html>
