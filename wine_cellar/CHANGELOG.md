@@ -1,3 +1,6 @@
+# 1.16.1
+- Statistics, Offers and Review never stay blank: if a page cannot be shown, the error and a Reload button are shown instead.
+
 # 1.16.0
 - Scan a barcode with the phone camera from the search field (also in the Home Assistant app): uses the browser's barcode reader or, where there is none, a built-in reader (ZXing). Frame guide, light button on phones with a torch.
 - A scanned wine opens in check-out mode: the stock is shown first and **Out** takes the bottle out and closes the wine.

@@ -5,6 +5,7 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fold = (s) => String(s ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const kr = (n) => n == null ? "" : Math.round(n).toLocaleString("en-GB") + " DKK";
+const LOADED_VERSION = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([^&]+)/) || [])[1] || "";
 const today = () => new Date().toISOString().slice(0, 10);
 
 const STATUS = {
@@ -895,10 +896,16 @@ function showTab(name) {
   $$(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   $$(".tab").forEach((t) => t.classList.toggle("on", t.id === "tab-" + name));
   save("tab", name);
-  if (name === "stats") renderStats();
+  const show = (fn, el) => fn().catch((e) => {   // never leave a tab blank: show what went wrong and offer a retry
+    console.error(e);
+    $(el).innerHTML = `<div class="panel wide"><p class="err">Could not show this page: ${esc(e.message || String(e))}</p>
+      <p class="small muted">App version ${esc(LOADED_VERSION || "?")}. If the app was just updated, reload the page.</p>
+      <div class="row"><button class="btn primary" onclick="location.reload()">Reload</button></div></div>`;
+  });
+  if (name === "stats") show(renderStats, "#tab-stats");
   if (name === "data") { renderMeta(); renderCleanup(); }
-  if (name === "review") renderReview();
-  if (name === "recs") renderRecs();
+  if (name === "review") show(renderReview, "#tab-review");
+  if (name === "recs") show(renderRecs, "#tab-recs");
 }
 
 // ------------------------------------------------------------- statistics
@@ -1194,7 +1201,6 @@ $("#impBtn").addEventListener("click", () => doImport(false));
 // ------------------------------------------------------------- start
 api("api/ai/status").then((r) => { aiEntity = r.entity; }).catch(() => {});
 // ------------------------------------------------------------- auto reload after an app update
-const LOADED_VERSION = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([^&]+)/) || [])[1] || "";
 async function checkVersion() {
   try {
     const v = (await api("api/version")).version;
