@@ -49,7 +49,7 @@ AREA_RULES = [
     (("fleurie", "chiroubles", "saint amour", "regnie", "brouilly", "cote de brouilly"), 2, 6,
      "Light Beaujolais cru; drink young."),
     (("beaujolais",), 1, 4, "Drink young; serve slightly chilled."),
-    (("bourgogne", "burgund", "auxerre"), 2, 6, "Drink relatively early; finesse over age."),
+    (("bourgogne", "burgundy", "burgund", "auxerre"), 2, 6, "Drink relatively early; finesse over age."),
     # Loire / Sydvest / Languedoc
     (("chinon", "bourgueil", "saumur champigny", "saint nicolas"), 4, 15, "Loire Cabernet Franc; surprisingly age-worthy."),
     (("cahors", "madiran"), 5, 15, "Tannic; give it time."),

@@ -41,7 +41,7 @@ configuration. No API key is stored in the app.
 Country is a dropdown with **+ Add new…**. Region, producer and shop suggest existing values while you type, and
 grapes are entered as tags. Every value is normalized when it is saved or imported: spellings that only differ in
 case, accents, spaces or hyphens become the most used spelling, and English country names map to the name you use
-(e.g. "France" → "Frankrig").
+(e.g. "Frankrig" → "France" once France is the name in use).
 
 Under **Import & export → Clean up values** you can merge likely duplicates (e.g. "Grernache" → "Grenache") and rename
 any value. Merges are remembered, so the old spelling is corrected automatically next time, also on Excel import.
@@ -52,6 +52,13 @@ Each wine has fields for **Robert Parker (Wine Advocate)**, **Wine Spectator** a
 a link to the review and a **Search** link (a Google search on the critic's site). The AI only fills in a score when it
 knows a published score for that exact vintage; check it with the link. Scores are shown as badges in the wine list.
 The critics' own sites require a subscription, so scores cannot be fetched from them automatically.
+
+## Review
+
+Suggested changes to values you already have, for example a new drinking window from a bulk review, are listed under
+**Review**. Each suggestion shows the current value, the suggested value, the reason and sources. You can adjust the
+value before you accept it, or reject it. Empty fields, such as critic scores, are filled in directly and listed at
+the bottom of the page with their source.
 
 ## Drinking window
 

@@ -12,6 +12,7 @@
   <nav class="tabs" role="tablist">
     <button data-tab="list" class="on">Wines</button>
     <button data-tab="stats">Statistics</button>
+    <button data-tab="review">Review <span class="badge" id="revCount" hidden></span></button>
     <button data-tab="data">Import &amp; export</button>
   </nav>
   <button class="btn primary" id="newWine">+ New wine</button>
@@ -32,7 +33,7 @@
         <option value="ready">Ready</option>
         <option value="young">Too young</option>
       </select>
-      <label class="chk"><input type="checkbox" id="fAll"> Show sold out</label>
+      <label class="chk"><input type="checkbox" id="fAll"> Show wines with 0 bottles</label>
     </div>
     <div class="summary" id="summary"></div>
     <div class="tablewrap">
@@ -52,6 +53,8 @@
   </section>
 
   <section id="tab-stats" class="tab"></section>
+
+  <section id="tab-review" class="tab"></section>
 
   <section id="tab-data" class="tab">
     <div class="panel">

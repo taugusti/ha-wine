@@ -1,3 +1,9 @@
+# 1.3.0
+- New Review tab: suggested changes to existing values (e.g. drinking windows) wait for your approval and can be
+  adjusted before you accept them. Empty fields (e.g. critic scores) can be filled in directly, with sources.
+- The "Show sold out" filter is now "Show wines with 0 bottles".
+- Rule estimate recognises "Burgundy".
+
 # 1.2.1
 - Critic links that only point to a front page are dropped, so the Search link is shown instead.
 

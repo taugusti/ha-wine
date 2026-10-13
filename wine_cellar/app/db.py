@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS movement (
 );
 CREATE INDEX IF NOT EXISTS movement_wine ON movement(wine_id);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+-- suggested changes waiting for the owner's approval (changes/old are JSON objects field -> value)
+CREATE TABLE IF NOT EXISTS proposal (
+  id INTEGER PRIMARY KEY,
+  wine_id INTEGER REFERENCES wine(id) ON DELETE CASCADE,
+  topic TEXT, changes TEXT NOT NULL, old TEXT, reason TEXT, sources TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',   -- pending | accepted | rejected | applied
+  created_at TEXT, decided_at TEXT
+);
 -- maps spelling variants to the canonical value of a field (alias is a fold() key)
 CREATE TABLE IF NOT EXISTS alias (
   field TEXT NOT NULL, alias TEXT NOT NULL, canonical TEXT NOT NULL,

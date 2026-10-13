@@ -23,6 +23,7 @@ from estimate import estimate
 from importer import run_import
 import ai
 import vocab
+import proposals
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 PORT = int(os.environ.get("WINE_PORT", "8099"))
@@ -170,7 +171,7 @@ def changed():
 
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
-    server_version = "WineCellar/1.2"
+    server_version = "WineCellar/1.3"
 
     def log_message(self, fmt, *args):
         if os.environ.get("WINE_DEBUG"):
@@ -357,6 +358,24 @@ class H(BaseHTTPRequestHandler):
                 raise
             changed()
             return self.send(200, {"wines_changed": n})
+        if path == "/api/proposals" and method == "GET":
+            return self.send(200, proposals.listing(c, q.get("status", "pending")))
+        if path == "/api/proposals" and method == "POST":
+            d = self.json_body()
+            c.execute("BEGIN")
+            try:
+                res = proposals.add(c, d.get("items") or [])
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
+            changed()
+            return self.send(200, res)
+        mp = re.fullmatch(r"/api/proposals/(\d+)/(accept|reject)", path)
+        if mp and method == "POST":
+            proposals.decide(c, int(mp[1]), mp[2] == "accept", (self.json_body() or {}).get("changes"))
+            changed()
+            return self.send(200, {"ok": True})
         if path == "/api/next-barcode":
             return self.send(200, {"barcode": next_barcode()})
         if path == "/api/estimate" and method == "POST":

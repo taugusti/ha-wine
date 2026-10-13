@@ -510,6 +510,7 @@ function showTab(name) {
   save("tab", name);
   if (name === "stats") renderStats();
   if (name === "data") { renderMeta(); renderCleanup(); }
+  if (name === "review") renderReview();
 }
 
 // ------------------------------------------------------------- statistics
@@ -573,6 +574,65 @@ async function doImport(dry) {
     if (!dry) { await refresh(); renderMeta(); }
   } catch (e) { $("#impResult").innerHTML = `<p class="err">Error: ${esc(e.message)}</p>`; }
 }
+// ------------------------------------------------------------- review proposals
+const FLABEL = { drink_from_age: "Drink from (yrs after vintage)", drink_to_age: "Drink until (yrs after vintage)", advice: "Drinking advice",
+  rp_score: "Wine Advocate", rp_url: "Wine Advocate link", ws_score: "Wine Spectator", ws_url: "Wine Spectator link",
+  js_score: "James Suckling", js_url: "James Suckling link", country: "Country", region: "Region", grapes: "Grapes",
+  producer: "Producer", description: "Description", vintage: "Vintage", info: "About the wine", serving: "Serving" };
+const yrsNote = (p, k, v) => (k === "drink_from_age" || k === "drink_to_age") && p.vintage && v !== "" && v != null ? ` <span class="muted">(${p.vintage + Number(v)})</span>` : "";
+
+async function updateReviewCount() {
+  try {
+    const n = (await api("api/proposals")).length;
+    const b = $("#revCount"); b.textContent = n; b.hidden = !n;
+  } catch { /* ignore */ }
+}
+
+async function renderReview() {
+  const [pend, all] = await Promise.all([api("api/proposals"), api("api/proposals?status=all")]);
+  const applied = all.filter((p) => p.status === "applied");
+  const el = $("#tab-review");
+  el.innerHTML = `
+    <div class="panel wide">
+      <h2>Review suggested changes</h2>
+      <p>${pend.length ? `${pend.length} suggestions change values you already have. You can adjust a value before you accept it.` : "Nothing to review."}</p>
+      ${pend.length > 1 ? '<div class="row"><button class="btn" id="accAll">Accept all</button></div>' : ""}
+    </div>
+    ${pend.map((p) => `<div class="panel wide prop" data-pid="${p.id}">
+      <div class="phead"><a href="#" data-openw="${p.wine_id}" class="wname">${esc(p.description)}</a><span class="tag">${esc(p.topic || "")}</span></div>
+      <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggested</th></tr></thead><tbody>
+      ${Object.entries(p.changes).map(([k, v]) => `<tr><td>${FLABEL[k] || k}</td><td class="muted">${esc(p.old[k] ?? "")}${yrsNote(p, k, p.old[k])}</td>
+        <td><input type="text" data-k="${k}" value="${esc(v ?? "")}">${yrsNote(p, k, v)}</td></tr>`).join("")}
+      </tbody></table>
+      ${p.reason ? `<p class="small">${esc(p.reason)}</p>` : ""}
+      ${p.sources.length ? `<p class="small muted">Sources: ${p.sources.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">${i + 1}</a>`).join(" · ")}</p>` : ""}
+      <div class="row"><button class="btn primary" data-acc="${p.id}">Accept</button><button class="btn" data-rej="${p.id}">Reject</button></div>
+    </div>`).join("")}
+    ${applied.length ? `<div class="panel wide"><details><summary><b>${applied.length} empty fields were filled in automatically</b></summary>
+      <ul class="clean">${applied.map((p) => `<li><a href="#" data-openw="${p.wine_id}">${esc(p.description)}</a>:
+        ${Object.entries(p.changes).filter(([k]) => !k.endsWith("_url")).map(([k, v]) => `${FLABEL[k] || k} ${esc(v)}`).join(", ")}
+        ${p.sources.length ? `<a href="${esc(p.sources[0])}" target="_blank" rel="noopener">source</a>` : ""}</li>`).join("")}</ul></details></div>` : ""}`;
+  updateReviewCount();
+}
+$("#tab-review").addEventListener("click", async (e) => {
+  const a = e.target.closest("[data-openw]");
+  if (a) { e.preventDefault(); openWine(a.dataset.openw); return; }
+  const b = e.target.closest("button"); if (!b) return;
+  const decide = async (id, accept) => {
+    const card = $(`.prop[data-pid="${id}"]`);
+    const changes = {};
+    $$("input[data-k]", card).forEach((i) => { changes[i.dataset.k] = i.value === "" ? null : (/^-?\d+$/.test(i.value) && i.dataset.k.endsWith("_age") ? Number(i.value) : i.value); });
+    await send(`api/proposals/${id}/${accept ? "accept" : "reject"}`, "POST", { changes });
+  };
+  try {
+    if (b.dataset.acc) await decide(b.dataset.acc, true);
+    else if (b.dataset.rej) await decide(b.dataset.rej, false);
+    else if (b.id === "accAll") { if (!confirm("Accept all suggestions?")) return; for (const c of $$(".prop")) await decide(c.dataset.pid, true); }
+    else return;
+    await refresh(); renderReview();
+  } catch (err) { toast("Error: " + err.message); }
+});
+
 // ------------------------------------------------------------- clean up values
 const FIELD_LABEL = { country: "Country", region: "Region", grapes: "Grapes", producer: "Producer", shop: "Shop" };
 async function renderCleanup() {
@@ -611,4 +671,5 @@ $("#impBtn").addEventListener("click", () => doImport(false));
 
 // ------------------------------------------------------------- start
 api("api/ai/status").then((r) => { aiEntity = r.entity; }).catch(() => {});
+updateReviewCount();
 refresh().then(() => showTab(load("tab", "list"))).catch((e) => toast("Could not load data: " + e.message));

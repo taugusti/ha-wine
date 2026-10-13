@@ -199,3 +199,9 @@ ul.clean input { flex: 1; min-width: 180px; }
 #cleanup summary { cursor: pointer; padding: 4px 0; font-weight: 600; }
 .exist { margin: 10px 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--now); font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
 .exist .btn { min-height: 30px; padding: 4px 10px; margin-left: 6px; }
+.badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink);
+  font-size: 11px; font-weight: 700; text-align: center; margin-left: 4px; }
+.panel.wide { max-width: 1000px; }
+.prop .phead { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+.prop .phead a { color: var(--text); text-decoration: none; }
+.prop table.sugg input { width: 100%; max-width: 360px; min-height: 32px; padding: 4px 8px; }
