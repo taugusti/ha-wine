@@ -269,3 +269,8 @@ table.sugg th:nth-child(4) { width: 84px; }
   table.sugg tr.acc { background: color-mix(in srgb, var(--ready) 10%, transparent); }
   table.sugg tr td { background: none !important; }
 }
+
+/* 1.9: peak window */
+.s-peak { color: #2e7d6b; }
+@media (prefers-color-scheme: dark) { .s-peak { color: #6fd1b5; } }
+.bar i.pk { opacity: 1; background: currentColor; top: 1px; bottom: 1px; }

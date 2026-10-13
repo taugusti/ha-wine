@@ -119,13 +119,16 @@ def web_search(agent, s):
         "2. Find published scores for this exact vintage from Robert Parker Wine Advocate, Wine Spectator and",
         "   James Suckling, with the URL of the page where you found each score (the critic's own page or a shop page",
         "   quoting it). Only scores you actually found; never estimate.",
-        "3. Any drinking window stated by a critic or the producer.",
+        "3. Drinking windows for this exact wine and vintage stated by critics (Wine Advocate, Wine Spectator, James",
+        "   Suckling, Vinous, Jancis Robinson, Decanter, Jeb Dunnuck, Jeff Leve ...) or by the producer (technical",
+        "   sheet, website). Give each as calendar years with the page URL. Also give a peak/optimal period if stated.",
         "Return ONLY this JSON, no other text:",
         '{"price_dkk": number or null, "price_note": "e.g. median of 3 Danish shops" or null,',
         ' "price_sources": [{"shop": str, "price_dkk": number, "url": str}],',
         ' "rp_score": str or null, "rp_url": str or null, "ws_score": str or null, "ws_url": str or null,',
         ' "js_score": str or null, "js_url": str or null,',
-        ' "critic_window": str or null, "critic_window_source": str or null}',
+        ' "drinking_windows": [{"source": str, "from_year": int, "to_year": int, "peak_from_year": int or null,',
+        '                        "peak_to_year": int or null, "url": str}]}',
     ])
     resp = _ha("POST", "/api/services/conversation/process?return_response",
                {"agent_id": agent, "language": "en", "text": q}, timeout=100)
@@ -164,9 +167,44 @@ def merge_search(s, w):
             s[f"{k}_url"] = u if ok else None
             if ok:
                 found["sources"].append({"label": f"{k.upper()} {sc}", "url": u})
-    if w.get("critic_window"):
-        found["critic_window"] = w["critic_window"] + (f" ({w['critic_window_source']})" if w.get("critic_window_source") else "")
+    merge_windows(s, w.get("drinking_windows"), found)
     return found
+
+
+def _median(xs):
+    xs = sorted(xs)
+    n = len(xs)
+    return None if not n else (xs[n // 2] if n % 2 else round((xs[n // 2 - 1] + xs[n // 2]) / 2))
+
+
+def merge_windows(s, windows, found):
+    """Published drinking windows (critics / producer) win over the AI's own estimate."""
+    vint = s.get("vintage")
+    good = []
+    for w in windows or []:
+        try:
+            f, t = int(w.get("from_year")), int(w.get("to_year"))
+        except (TypeError, ValueError):
+            continue
+        if not vint or not (vint <= f <= t <= vint + 60):
+            continue
+        good.append((w, f, t))
+        if str(w.get("url", "")).startswith("http"):
+            found["sources"].append({"label": f"{w.get('source') or 'Window'}: {f}–{t}", "url": w["url"]})
+    if not good:
+        return
+    found["critic_window"] = "; ".join(f"{w.get('source') or '?'} {f}–{t}" for w, f, t in good)
+    s["drink_from_age"] = _median([f for _, f, _ in good]) - vint
+    s["drink_to_age"] = _median([t for _, _, t in good]) - vint
+    peaks = [(int(w["peak_from_year"]), int(w["peak_to_year"])) for w, _, _ in good
+             if str(w.get("peak_from_year") or "").isdigit() and str(w.get("peak_to_year") or "").isdigit()]
+    if peaks:
+        s["peak_from_age"] = _median([p[0] for p in peaks]) - vint
+        s["peak_to_age"] = _median([p[1] for p in peaks]) - vint
+    s["window_basis"] = "Published drinking windows: " + found["critic_window"] + "."
+    for k in ("drink_from_age", "drink_to_age"):
+        if k in s.get("uncertain_fields", []):
+            s["uncertain_fields"].remove(k)
 
 
 def barcode_info(code):
@@ -204,9 +242,15 @@ STRUCTURE = {
     "grapes": _t("Grape varieties, comma separated, no percentages"),
     "wine_type": _t("One of: red, white, rosé, sparkling, dessert, fortified"),
     "size_cl": _n("Bottle size in cl (75, 150 for magnum, 37.5 for half bottle)"),
-    "drink_from_age": _n("Drinking window start, in years after the vintage"),
-    "drink_to_age": _n("Drinking window end, in years after the vintage"),
-    "advice": _t("One sentence on the drinking window and what it is based on (area, producer or the specific wine)"),
+    "drink_from_age": _n("Drinking window start, in years after the vintage (when the wine is open and enjoyable)"),
+    "drink_to_age": _n("Drinking window end, in years after the vintage (before it is past its best)"),
+    "peak_from_age": _n("Start of the optimal/peak period, in years after the vintage"),
+    "peak_to_age": _n("End of the optimal/peak period, in years after the vintage"),
+    "window_basis": _t("What the drinking window is based on, naming the specifics: a critic's or the producer's published "
+                       "window, this producer's style and track record (traditional/modern, extraction, oak), the cuvée's "
+                       "level (grand vin, second wine, entry level, single vineyard), the vintage's character, bottle size, "
+                       "or only general appellation norms"),
+    "advice": _t("One or two sentences of drinking advice for this specific wine"),
     "serving": _t("Short serving advice: temperature, decanting"),
     "list_price": _n("Estimated typical Danish retail price for ONE bottle of this size, in DKK incl. VAT, excluding "
                      "shipping and without quantity discounts; 0 if you cannot estimate it"),
@@ -269,6 +313,13 @@ def build_prompt(con, text, barcode, binfo, current, n_photos=0, photo_labels=No
         f"Known shops: {', '.join(_known(con, 'shop'))}",
         "",
         f"The current year is {date.today().year}. The drinking window is given in whole years after the vintage.",
+        "Drinking window: base it on THIS wine, not on the appellation average. Use what you know about the producer",
+        "(style, reputation, how their wines age), the cuvée's place in the producer's range, the vintage's character",
+        "in this region (e.g. a ripe, structured year ages longer; a light or early-drinking year shorter), the grapes,",
+        "the price level and the bottle size (magnums age more slowly). If a critic or the producer has published a",
+        "window for this wine and vintage, use it. Also give the peak period. Explain the specifics in window_basis;",
+        "if you only know general norms for the appellation, say so and list drink_from_age/drink_to_age in",
+        "uncertain_fields.",
         "Critic scores: only give a score if you know it was actually published for this exact wine and vintage,",
         "and give the URL where it is published. Never estimate or invent a score; leave it empty instead.",
         "The estimated price (list_price) is a typical Danish shop price for one bottle; it is an estimate, so list",
@@ -285,7 +336,7 @@ def _clean(d):
             v = v.strip()
             if v.lower() in ("", "unknown", "n/a", "none", "null", "-"):
                 v = None
-        if isinstance(v, (int, float)) and v == 0 and k not in ("drink_from_age",):
+        if isinstance(v, (int, float)) and v == 0 and k not in ("drink_from_age", "peak_from_age"):
             v = None
         if isinstance(v, float) and v.is_integer():
             v = int(v)
@@ -331,6 +382,10 @@ def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, pro
     if barcode and not (current or {}).get("barcode"):
         s["barcode"] = re.sub(r"\s", "", barcode)
     s["uncertain_fields"] = [f.strip() for f in re.split(r"[,;\s]+", s.get("uncertain_fields") or "") if f.strip() in STRUCTURE]
+    # a peak outside the drinking window makes no sense
+    if s.get("peak_from_age") is not None and s.get("drink_from_age") is not None and s.get("drink_to_age") is not None:
+        if not (s["drink_from_age"] <= s["peak_from_age"] <= (s.get("peak_to_age") or s["peak_from_age"]) <= s["drink_to_age"]):
+            s.pop("peak_from_age", None); s.pop("peak_to_age", None)
     if saved and not (current or {}).get("photo"):
         s["photo"] = saved[0][0]
     search = {"agent": search_entity()}

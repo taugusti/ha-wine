@@ -1,3 +1,9 @@
+# 1.9.0
+- Closing a wine with unsaved changes (or a new wine with data or photos) asks for confirmation.
+- Drinking windows are based on the specific wine: producer style and track record, the cuvée level, the vintage character and bottle size. "Window based on" explains what the window rests on.
+- The web search looks for published drinking windows from critics and producers; these are used instead of the AI estimate (median of the windows found), with sources.
+- New peak window (Peak from/until), shown as a darker band in the list, and a new "At peak" status and filter.
+
 # 1.8.1
 - Suggestions are shown as soon as the wine is identified; the web search (prices, critic scores) continues in the background and its results are added when they arrive. Your accept/reject decisions are kept.
 - Cancel during the web search keeps the suggestions and only stops the search. Web search time limit 100 s.

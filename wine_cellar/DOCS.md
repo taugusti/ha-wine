@@ -87,7 +87,16 @@ the bottom of the page with their source.
 
 ## Drinking window
 
-The window is given in years after vintage, as in Excel. Your own window (Drink age from/to) is used. If it is
+The window is given in years after vintage, as in Excel. A wine can also have a **peak** window (when it is at its
+best), shown as a darker band in the list; wines in their peak period get the status **At peak**.
+
+Smart fill estimates the window for the specific wine: the producer's style and track record, the cuvée's level
+(grand vin, second wine, entry level), the vintage's character, the grapes, the price level and the bottle size.
+If the web search finds drinking windows published by critics or the producer, those are used instead (the median
+of the windows found), with links. **Window based on** says what the window rests on; when the AI only knows general
+appellation norms it says so and marks the window as uncertain.
+
+ Your own window (Drink age from/to) is used. If it is
 missing, the **auto estimate** is used. It is rule-based on region/appellation, wine type, magnum and price
 (`app/estimate.py`).
 

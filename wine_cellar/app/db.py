@@ -61,12 +61,15 @@ MIGRATIONS = [
     ("wine", "js_score", "TEXT"), ("wine", "js_url", "TEXT"),
     ("wine", "info", "TEXT"),
     ("wine", "photo", "TEXT"),
+    ("wine", "peak_from_age", "INTEGER"), ("wine", "peak_to_age", "INTEGER"),
+    ("wine", "window_basis", "TEXT"),
 ]
 
 WINE_FIELDS = ["barcode", "description", "vintage", "wine_type", "country", "producer", "region", "grapes",
                "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "advice", "rationale", "serving",
                "purchase_price", "list_price", "shop", "note", "link", "location", "archived", "size_cl",
-               "rp_score", "rp_url", "ws_score", "ws_url", "js_score", "js_url", "info", "photo"]
+               "rp_score", "rp_url", "ws_score", "ws_url", "js_score", "js_url", "info", "photo",
+               "peak_from_age", "peak_to_age", "window_basis"]
 
 
 def now():

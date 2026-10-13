@@ -38,7 +38,8 @@ def _version():
 VERSION = os.environ.get("WINE_VERSION") or _version()
 PORT = int(os.environ.get("WINE_PORT", "8099"))
 OWN_PREFIX = os.environ.get("WINE_BARCODE_PREFIX", "999888777")
-INT_FIELDS = {"vintage", "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "archived"}
+INT_FIELDS = {"vintage", "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "archived",
+              "peak_from_age", "peak_to_age"}
 FLOAT_FIELDS = {"purchase_price", "list_price"}
 
 
@@ -65,6 +66,8 @@ def enrich(w, stock=None, last_move=None):
     w["window_source"] = src
     if w.get("vintage"):
         w["drink_year_from"], w["drink_year_to"] = w["vintage"] + fa, w["vintage"] + ta
+        if w.get("peak_from_age") is not None and w.get("peak_to_age") is not None:
+            w["peak_year_from"], w["peak_year_to"] = w["vintage"] + w["peak_from_age"], w["vintage"] + w["peak_to_age"]
     else:
         w["drink_year_from"] = w["drink_year_to"] = None
     if stock is not None:

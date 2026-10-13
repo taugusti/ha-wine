@@ -8,7 +8,7 @@ const kr = (n) => n == null ? "" : Math.round(n).toLocaleString("en-GB") + " DKK
 const today = () => new Date().toISOString().slice(0, 10);
 
 const STATUS = {
-  young: "Too young", ready: "Ready", now: "Drink soon", over: "Past window", unknown: "Unknown",
+  young: "Too young", ready: "Ready", peak: "At peak", now: "Drink soon", over: "Past window", unknown: "Unknown",
 };
 const TYPES = ["red", "white", "rosé", "sparkling", "dessert", "fortified"];
 const KIND = { in: "In", out: "Out", count: "Stock count" };
@@ -40,6 +40,7 @@ function status(w) {
   if (t == null) return "unknown";
   if (Y > t) return "over";
   if (Y >= t - 1) return "now"; // this year or next year
+  if (w.peak_year_from != null && Y >= w.peak_year_from && Y <= w.peak_year_to) return "peak";
   if (Y >= f) return "ready";
   return "young";
 }
@@ -90,7 +91,8 @@ function winCell(w) {
   const l = pct(w.drink_year_from), r = pct(w.drink_year_to + 1);
   return `<div class="win s-${s}">
     <div><span class="yrs">${w.drink_year_from}–${w.drink_year_to}</span><span class="chip">${STATUS[s]}</span></div>
-    <div class="bar" title="${lo}–${hi}"><i style="left:${l}%;width:${Math.max(1, r - l)}%"></i><b style="left:${pct(Y + 0.5)}%"></b></div>
+    <div class="bar" title="${w.peak_year_from != null ? `Peak ${w.peak_year_from}–${w.peak_year_to}` : ""}"><i style="left:${l}%;width:${Math.max(1, r - l)}%"></i>${w.peak_year_from != null
+      ? `<i class="pk" style="left:${pct(w.peak_year_from)}%;width:${Math.max(1, pct(w.peak_year_to + 1) - pct(w.peak_year_from))}%"></i>` : ""}<b style="left:${pct(Y + 0.5)}%"></b></div>
     ${w.window_source !== "own" ? `<span class="src">${esc(w.window_source)}</span>` : ""}
   </div>`;
 }
@@ -275,9 +277,12 @@ async function openWine(id, preset = {}) {
         <div class="grid" style="margin-bottom:12px">
           <label>Drink from (years after vintage)<input form="wf" type="number" name="drink_from_age" value="${esc(w.drink_from_age ?? "")}"></label>
           <label>Drink until (years after vintage)<input form="wf" type="number" name="drink_to_age" value="${esc(w.drink_to_age ?? "")}"></label>
+          <label>Peak from (years after vintage)<input form="wf" type="number" name="peak_from_age" value="${esc(w.peak_from_age ?? "")}"></label>
+          <label>Peak until (years after vintage)<input form="wf" type="number" name="peak_to_age" value="${esc(w.peak_to_age ?? "")}"></label>
         </div>
         <div class="est" id="estBox"></div>
         <div class="grid" style="margin-top:12px">
+          <label class="wide">Window based on<textarea form="wf" name="window_basis">${esc(w.window_basis ?? "")}</textarea></label>
           <label class="wide">Drinking advice<textarea form="wf" name="advice">${esc(w.advice ?? "")}</textarea></label>
           <label class="wide">Serving<textarea form="wf" name="serving">${esc(w.serving ?? "")}</textarea></label>
         </div>
@@ -309,6 +314,7 @@ async function openWine(id, preset = {}) {
     </div>`;
   d.classList.add("open"); d.setAttribute("aria-hidden", "false"); $("#scrim").hidden = false;
   renderChips(); updateRegionList(); scoreLinks(); renderEst(); if (aiEntity) renderThumbs();
+  snapshotForm();
   $("#wf").addEventListener("submit", (e) => e.preventDefault());
   if (isNew && preset.barcode) $("#aiText")?.focus();
 }
@@ -330,7 +336,7 @@ async function renderEst() {
   const line = (lbl, a, b, why, use) => `<span class="lbl">${lbl}</span><span>${a}–${b} yrs ${yr(a) != null ? `<span class="muted">(${yr(a)}–${yr(b)})</span>` : ""}</span>
      ${use ? `<button type="button" class="btn" data-use="${a},${b}">Use</button>` : "<span></span>"}${why ? `<span class="why">${esc(why)}</span>` : ""}`;
   $("#estBox").innerHTML =
-    (own ? line("Your window", f.drink_from_age, f.drink_to_age, "", false) : `<span class="lbl">Your window</span><span class="muted">not set, so the estimate is used</span><span></span>`) +
+    (own ? line("Your window", f.drink_from_age, f.drink_to_age, f.peak_from_age !== "" && f.peak_to_age !== "" ? `Peak ${f.peak_from_age}–${f.peak_to_age} yrs${yr(f.peak_from_age) != null ? ` (${yr(f.peak_from_age)}–${yr(f.peak_to_age)})` : ""}` : "", false) : `<span class="lbl">Your window</span><span class="muted">not set, so the estimate is used</span><span></span>`) +
     line("Rule estimate", est.from, est.to, est.rationale + " " + est.advice, true);
 }
 
@@ -339,7 +345,8 @@ const SUGG_FIELDS = [
   ["description", "Description"], ["barcode", "Barcode"], ["producer", "Producer"], ["vintage", "Vintage"], ["country", "Country"],
   ["region", "Region"], ["grapes", "Grapes"], ["wine_type", "Type"], ["size_cl", "Bottle size (cl)"],
   ["list_price", "Estimated price (1 bottle)"], ["quantity", "Bottles bought"], ["shop", "Shop"],
-  ["drink_from_age", "Drink from (yrs)"], ["drink_to_age", "Drink until (yrs)"], ["advice", "Drinking advice"],
+  ["drink_from_age", "Drink from (yrs)"], ["drink_to_age", "Drink until (yrs)"], ["peak_from_age", "Peak from (yrs)"],
+  ["peak_to_age", "Peak until (yrs)"], ["window_basis", "Window based on"], ["advice", "Drinking advice"],
   ["serving", "Serving"], ["info", "About the wine"],
   ["rp_score", "Wine Advocate"], ["rp_url", "Wine Advocate link"], ["ws_score", "Wine Spectator"],
   ["ws_url", "Wine Spectator link"], ["js_score", "James Suckling"], ["js_url", "James Suckling link"],
@@ -523,7 +530,8 @@ function renderSuggestions(r) {
     <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggestion</th><th></th></tr></thead><tbody>
     ${rows.map(([k, l]) => {
       const u = unsure.has(k);
-      return `<tr class="${u ? "unsure" : ""}" data-row="${k}"><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${esc(cur(k))}</td><td>${esc(r.suggestion[k])}</td>
+      const vy = Number(r.suggestion.vintage || f.vintage), yy = (v) => (k.endsWith("_age") && vy && v !== "" && v != null ? ` (${vy + Number(v)})` : "");
+      return `<tr class="${u ? "unsure" : ""}" data-row="${k}"><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${esc(cur(k))}${yy(cur(k))}</td><td>${esc(r.suggestion[k])}${yy(r.suggestion[k])}</td>
         <td class="acts2"><button type="button" class="okb" data-acc1="${k}" title="Accept">✓</button><button type="button" class="nob" data-rej1="${k}" title="Reject">✕</button></td></tr>`;
     }).join("")}
     </tbody></table>`;
@@ -557,7 +565,8 @@ async function decideRows(keys, accept) {
     if (current.id) {   // existing wine: save the accepted fields right away
       const f = formData(), body = {};
       keys.filter((k) => k !== "quantity").forEach((k) => { body[k] = f[k]; });
-      try { await send(`api/wines/${current.id}`, "PUT", body); Object.assign(current, body); toast(keys.length > 1 ? "Saved" : "Saved"); refresh(); }
+      try { await send(`api/wines/${current.id}`, "PUT", body); Object.assign(current, body);
+        const snap = JSON.parse(formSnapshot || "{}"); Object.assign(snap, body); formSnapshot = JSON.stringify(snap); toast(keys.length > 1 ? "Saved" : "Saved"); refresh(); }
       catch (e) { toast("Error: " + e.message); return; }
     }
     renderEst(); scoreLinks();
@@ -566,6 +575,20 @@ async function decideRows(keys, accept) {
     aiDecisions[k] = { d: accept ? "acc" : "rej", v: lastSugg[k] };
     markRow($(`#aiResult tr[data-row="${k}"]`), accept);
   });
+}
+
+let formSnapshot = "";
+const snapshotForm = () => { formSnapshot = JSON.stringify(formData()); };
+function isDirty() {
+  if (!current || !$("#wf")) return false;
+  const g = $("#grapeIn");
+  if (g && g.value.trim()) return true;
+  if (!current.id && (aiPhotos.front || aiPhotos.back)) return true;
+  return JSON.stringify(formData()) !== formSnapshot;
+}
+function requestClose() {
+  if (isDirty() && !confirm(current.id ? "You have unsaved changes. Close without saving?" : "This new wine has not been saved. Close and discard it?")) return;
+  closeDrawer();
 }
 
 function closeDrawer() {
@@ -600,7 +623,7 @@ async function move(kind) {
 
 $("#drawer").addEventListener("click", async (e) => {
   const t = e.target.closest("button"); if (!t) return;
-  if (t.matches("[data-close]")) closeDrawer();
+  if (t.matches("[data-close]")) requestClose();
   else if (t.id === "saveW") saveWine();
   else if (t.id === "aiGo") aiLookup();
   else if (t.dataset.shoot) openPhotoCamera(t.dataset.shoot);
@@ -611,7 +634,7 @@ $("#drawer").addEventListener("click", async (e) => {
   else if (t.dataset.acc1) decideRows([t.dataset.acc1], true);
   else if (t.dataset.rej1) decideRows([t.dataset.rej1], false);
   else if (t.id === "aiUpdate") { const sm = $("#drawer .smart"); if (sm) { sm.open = true; sm.scrollIntoView({ behavior: "smooth" }); } aiLookup(); }
-  else if (t.dataset.openwine) openWine(t.dataset.openwine);
+  else if (t.dataset.openwine) { if (!isDirty() || confirm("This new wine has not been saved. Open the existing wine and discard it?")) openWine(t.dataset.openwine); }
   else if (t.dataset.mv) move(t.dataset.mv);
   else if (t.dataset.rmgrape != null) {
     const h = $('#drawer [name="grapes"]');
@@ -654,8 +677,8 @@ $("#drawer").addEventListener("input", (e) => {
   if (!e.target.name || !current) return;
   clearTimeout(renderEst.t); renderEst.t = setTimeout(() => { renderEst(); scoreLinks(); }, 300);
 });
-$("#scrim").addEventListener("click", closeDrawer);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current) closeDrawer(); });
+$("#scrim").addEventListener("click", () => requestClose());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && $("#pcam").hidden) requestClose(); });
 
 // ------------------------------------------------------------- search, sort, scan
 $("#tbl thead").addEventListener("click", (e) => {
@@ -772,11 +795,12 @@ async function doImport(dry) {
   } catch (e) { $("#impResult").innerHTML = `<p class="err">Error: ${esc(e.message)}</p>`; }
 }
 // ------------------------------------------------------------- review proposals
-const FLABEL = { drink_from_age: "Drink from (yrs after vintage)", drink_to_age: "Drink until (yrs after vintage)", advice: "Drinking advice",
+const FLABEL = { drink_from_age: "Drink from (yrs after vintage)", drink_to_age: "Drink until (yrs after vintage)",
+  peak_from_age: "Peak from (yrs after vintage)", peak_to_age: "Peak until (yrs after vintage)", window_basis: "Window based on", advice: "Drinking advice",
   rp_score: "Wine Advocate", rp_url: "Wine Advocate link", ws_score: "Wine Spectator", ws_url: "Wine Spectator link",
   js_score: "James Suckling", js_url: "James Suckling link", country: "Country", region: "Region", grapes: "Grapes",
   producer: "Producer", description: "Description", vintage: "Vintage", info: "About the wine", serving: "Serving" };
-const yrsNote = (p, k, v) => (k === "drink_from_age" || k === "drink_to_age") && p.vintage && v !== "" && v != null ? ` <span class="muted">(${p.vintage + Number(v)})</span>` : "";
+const yrsNote = (p, k, v) => k.endsWith("_age") && p.vintage && v !== "" && v != null ? ` <span class="muted">(${p.vintage + Number(v)})</span>` : "";
 
 async function updateReviewCount() {
   try {
