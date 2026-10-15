@@ -1,4 +1,4 @@
-"""Wine Cellar - small web server for Home Assistant (ingress).
+"""Wine Cellar - small web server for Home Assistant (ingress, plus a direct port with its own login).
 
 Python standard library only, plus openpyxl for the Excel import.
 """
@@ -22,6 +22,7 @@ from db import WINE_FIELDS, now
 from estimate import estimate
 from importer import run_import
 import ai
+import auth
 import vocab
 import proposals
 import bulk
@@ -39,6 +40,10 @@ def _version():
 
 VERSION = os.environ.get("WINE_VERSION") or _version()
 PORT = int(os.environ.get("WINE_PORT", "8099"))
+DIRECT_PORT = int(os.environ.get("WINE_DIRECT_PORT", "8100"))
+# Home Assistant ingress always connects from the Supervisor's address; nothing else may use the ingress port.
+INGRESS_ADDRS = set(os.environ.get("WINE_INGRESS_ALLOW", "172.30.32.2,127.0.0.1").split(","))
+PUBLIC_FILES = {"/wc/style.css", "/wc/glass.svg"}  # needed by the login page
 OWN_PREFIX = os.environ.get("WINE_BARCODE_PREFIX", "999888777")
 INT_FIELDS = {"vintage", "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "archived",
               "peak_from_age", "peak_to_age"}
@@ -265,6 +270,7 @@ def start_lookup(d):
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
     server_version = "WineCellar/1.6"
+    user = None  # logged-in user on the direct port
 
     def log_message(self, fmt, *args):
         if os.environ.get("WINE_DEBUG"):
@@ -297,6 +303,11 @@ class H(BaseHTTPRequestHandler):
         path = re.sub(r"/+", "/", u.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if getattr(self.server, "direct", False):
+                if not self.gate(method, path):
+                    return
+            elif self.client_address[0] not in INGRESS_ADDRS:
+                return self.send(403, {"error": "Open Wine Cellar from Home Assistant."})
             if path.startswith("/api/ai/"):
                 # slow calls to Home Assistant: use a separate connection and do not block other requests
                 return self.dispatch_ai(method, path)
@@ -307,6 +318,45 @@ class H(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             self.send(500, {"error": f"{type(e).__name__}: {e}"})
+
+    def same_origin(self):
+        """Browsers send Origin (or Referer) on form posts and fetches; it must be this server."""
+        src = self.headers.get("Origin") or self.headers.get("Referer")
+        return not src or urlparse(src).netloc == self.headers.get("Host")
+
+    def gate(self, method, path):
+        """Login on the direct port. Returns True when the request may go on."""
+        addr = self.client_address[0]
+        if path == "/login":
+            if method == "POST":
+                if not self.same_origin():
+                    self.send(403, {"error": "forbidden"})
+                    return False
+                form = {k: v[0] for k, v in parse_qs(self.body().decode("utf-8", "replace")).items()}
+                user, err = auth.login(addr, form.get("username"), form.get("password"))
+                if user:
+                    self.send(303, "", "text/plain", {"Location": "/", "Set-Cookie": auth.make_cookie(user)})
+                else:
+                    self.send(401, auth.login_page(err, VERSION), "text/html; charset=utf-8")
+            else:
+                self.send(200, auth.login_page(None, VERSION), "text/html; charset=utf-8")
+            return False
+        if path == "/logout":
+            self.send(303, "", "text/plain", {"Location": "/login", "Set-Cookie": auth.clear_cookie()})
+            return False
+        if method == "GET" and path in PUBLIC_FILES:
+            return True
+        self.user = auth.session_user(self.headers.get("Cookie"))
+        if not self.user:
+            if path.startswith("/api/"):
+                self.send(401, {"error": "You are logged out. Reload the page to log in.", "login": True})
+            else:
+                self.send(303, "", "text/plain", {"Location": "/login"})
+            return False
+        if method != "GET" and not self.same_origin():
+            self.send(403, {"error": "forbidden"})
+            return False
+        return True
 
     def do_GET(self):
         self.route("GET")
@@ -508,6 +558,8 @@ class H(BaseHTTPRequestHandler):
             proposals.decide(c, int(mp[1]), mp[2] == "accept", (self.json_body() or {}).get("changes"))
             changed()
             return self.send(200, {"ok": True})
+        if path == "/api/session":
+            return self.send(200, {"direct": bool(getattr(self.server, "direct", False)), "user": self.user})
         if path == "/api/version":
             return self.send(200, {"version": VERSION})
         if path == "/api/next-barcode":
@@ -552,7 +604,13 @@ def main():
     db.con()
     threading.Thread(target=ha_push_loop, daemon=True).start()
     changed()
-    print(f"Wine Cellar running on port {PORT}, database: {db.DB_PATH}", flush=True)
+    print(f"Wine Cellar running on port {PORT} (ingress) and {DIRECT_PORT} (direct, login), database: {db.DB_PATH}",
+          flush=True)
+    users = sorted(auth.allowed_users())
+    print("Direct access users: " + (", ".join(users) if users else "none (direct access is off)"), flush=True)
+    direct = ThreadingHTTPServer(("0.0.0.0", DIRECT_PORT), H)
+    direct.direct = True
+    threading.Thread(target=direct.serve_forever, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
 
 

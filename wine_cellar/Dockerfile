@@ -8,5 +8,6 @@ RUN mkdir -p /app/static/vendor && python -c "import urllib.request as u; u.urlr
 WORKDIR /app
 ENV WINE_DB=/data/wine_cellar.db \
     WINE_PORT=8099 \
+    WINE_DIRECT_PORT=8100 \
     PYTHONDONTWRITEBYTECODE=1
 CMD ["python", "-u", "/app/server.py"]

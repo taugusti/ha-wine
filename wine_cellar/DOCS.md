@@ -145,6 +145,27 @@ The app keeps these sensors updated:
   Empty means the first AI Task entity found.
 - `search_agent_entity` (optional): conversation agent with web search, e.g. `conversation.wine_search`.
   Empty means an agent whose entity ID contains "search"; `none` turns the web search step off.
+- `allowed_users` (optional): Home Assistant usernames (the login name, not the display name) that may use
+  direct access, see below. Empty means direct access is off.
+
+## Direct access for users who should only see Wine Cellar
+
+Home Assistant only shows app panels in the sidebar to administrators, so a normal user cannot open Wine Cellar
+from Home Assistant. Instead, the app has its own port with a login:
+
+1. Create a normal (non-admin) Home Assistant user for it, or use an existing one.
+2. Add that user's username under `allowed_users` in the app configuration and restart the app.
+3. Open `http://homeassistant.local:8100` (or the Home Assistant machine's IP address) and log in with the
+   user's Home Assistant username and password. On a PC you can make a shortcut that opens it as its own window,
+   e.g. `msedge --app=http://homeassistant.local:8100`.
+
+The password is checked by Home Assistant and never stored by the app. The browser stays logged in for 90 days;
+**Log out** in the header ends the session, and removing a user from `allowed_users` logs them out at once.
+After 5 failed attempts from one address, login is paused for 15 minutes.
+
+Direct access works on your local network only (plain http, not through Nabu Casa), so the camera in Smart fill and
+the barcode scanner fall back to the photo picker there. The port can be changed or turned off under the app's
+**Network** settings.
 
 ## Data and backup
 

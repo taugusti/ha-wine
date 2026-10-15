@@ -37,6 +37,7 @@ async function api(path, opt = {}) {
   const r = await fetch(path, opt);
   const ct = r.headers.get("content-type") || "";
   const body = ct.includes("json") ? await r.json() : await r.text();
+  if (r.status === 401 && body && body.login) { location.href = "/login"; } // direct access: session expired
   if (!r.ok) throw new Error(body.error || r.statusText);
   return body;
 }
@@ -1229,3 +1230,10 @@ closeDrawer = function () { _close(); checkVersion(); };
 
 updateReviewCount();
 refresh().then(() => showTab(load("tab", "list"))).catch((e) => toast("Could not load data: " + e.message));
+
+// Direct access (own port with login): show who is logged in and a log-out button
+api("api/session").then((s) => {
+  if (!s.direct) return;
+  const b = $("#logout");
+  b.hidden = false; b.title = `Logged in as ${s.user}`;
+}).catch(() => { /* older server or not available */ });

@@ -1,3 +1,7 @@
+# 1.18.0
+- **Direct access with login** on the app's own port (8100): open `http://<home-assistant>:8100` and log in with a Home Assistant user listed under the new `allowed_users` option. Such a user only sees Wine Cellar, not the rest of Home Assistant — Home Assistant only shows app panels in the sidebar to administrators, so this is the way to give a normal user access. The login is checked by Home Assistant; you stay logged in for 90 days, and removing a user from `allowed_users` logs them out at once. A **Log out** button is shown when the app is opened this way.
+- The ingress port now only accepts requests from Home Assistant itself.
+
 # 1.17.0
 - App files are served from a new path (wc/ instead of static/), so the Home Assistant frontend cache can no longer hand out an old app.js. The page also reports to the app log if the app code did not load.
 
