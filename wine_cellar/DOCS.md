@@ -147,25 +147,48 @@ The app keeps these sensors updated:
   Empty means an agent whose entity ID contains "search"; `none` turns the web search step off.
 - `allowed_users` (optional): Home Assistant usernames (the login name, not the display name) that may use
   direct access, see below. Empty means direct access is off.
+- `extra_hostnames` (optional): more names or IP addresses for the direct-access certificate.
+- `certfile` / `keyfile` (optional): your own certificate in Home Assistant's `/ssl` folder for direct access.
 
 ## Direct access for users who should only see Wine Cellar
 
 Home Assistant only shows app panels in the sidebar to administrators, so a normal user cannot open Wine Cellar
-from Home Assistant. Instead, the app has its own port with a login:
+from Home Assistant. Instead, the app has its own HTTPS port with a login:
 
 1. Create a normal (non-admin) Home Assistant user for it, or use an existing one.
 2. Add that user's username under `allowed_users` in the app configuration and restart the app.
-3. Open `http://homeassistant.local:8100` (or the Home Assistant machine's IP address) and log in with the
-   user's Home Assistant username and password. On a PC you can make a shortcut that opens it as its own window,
-   e.g. `msedge --app=http://homeassistant.local:8100`.
+3. Open `https://homeassistant.local:8100` (or the Home Assistant machine's IP address) and log in with the
+   user's Home Assistant username and password.
 
 The password is checked by Home Assistant and never stored by the app. The browser stays logged in for 90 days;
 **Log out** in the header ends the session, and removing a user from `allowed_users` logs them out at once.
-After 5 failed attempts from one address, login is paused for 15 minutes.
+After 5 failed attempts from one address, login is paused for 15 minutes. Plain `http://` addresses are
+redirected to `https://`.
 
-Direct access works on your local network only (plain http, not through Nabu Casa), so the camera in Smart fill and
-the barcode scanner fall back to the photo picker there. The port can be changed or turned off under the app's
-**Network** settings.
+### Trust the certificate (once per device)
+
+The app makes its own certificate for the Home Assistant host's names and local IP addresses. Browsers only accept
+it once the app's certificate authority is installed on the device:
+
+1. On the login page, click **Download the Wine Cellar certificate** (`/ca.crt`). If the browser warns first,
+   choose *Advanced → Continue* to get to the page.
+2. **Windows:** open the downloaded file → **Install Certificate** → *Current User* → *Place all certificates in
+   the following store* → **Trusted Root Certification Authorities** → Finish, and confirm the warning.
+   **macOS:** open it in Keychain Access, then set it to *Always Trust*. **Android:** Settings → Security →
+   Encryption & credentials → Install a certificate → CA certificate.
+3. Restart the browser and open `https://homeassistant.local:8100` again; the padlock is now shown.
+
+The certificate authority is limited to `.local` names, `homeassistant` and private IP addresses, so trusting it
+cannot be used for any public website. The server certificate is renewed automatically. If the device reaches Home
+Assistant by another name or address, add it under `extra_hostnames` and restart the app. If you already have a
+certificate in Home Assistant's `/ssl` folder, set `certfile` and `keyfile` to use it instead.
+
+### Install as an app in Chrome or Edge
+
+With the padlock showing, use the install button in the address bar (or ⋮ → *Cast, save and share* →
+**Install page as app**). Wine Cellar then opens in its own window from the Start menu, taskbar or desktop.
+
+Direct access works on your local network only, not through Nabu Casa.
 
 ## Data and backup
 

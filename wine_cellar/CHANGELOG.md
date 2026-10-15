@@ -1,3 +1,8 @@
+# 1.19.0
+- Direct access (port 8100) now uses **HTTPS**, so Wine Cellar can be installed as an app in Chrome and Edge, and the camera works there too. The app makes its own certificate for the Home Assistant host's names and IP addresses; install its certificate authority once per device from the link on the login page (see the documentation). The authority can only vouch for local names and private addresses. Plain http is redirected to https.
+- Your own certificate from the `/ssl` folder can be used instead (`certfile` / `keyfile`), and extra names or addresses can be added with `extra_hostnames`.
+- App icons and a web app manifest for installing the app.
+
 # 1.18.0
 - **Direct access with login** on the app's own port (8100): open `http://<home-assistant>:8100` and log in with a Home Assistant user listed under the new `allowed_users` option. Such a user only sees Wine Cellar, not the rest of Home Assistant — Home Assistant only shows app panels in the sidebar to administrators, so this is the way to give a normal user access. The login is checked by Home Assistant; you stay logged in for 90 days, and removing a user from `allowed_users` logs them out at once. A **Log out** button is shown when the app is opened this way.
 - The ingress port now only accepts requests from Home Assistant itself.

@@ -8,6 +8,8 @@ import json
 import mimetypes
 import os
 import re
+import socket
+import ssl
 import threading
 import time
 import traceback
@@ -23,6 +25,7 @@ from estimate import estimate
 from importer import run_import
 import ai
 import auth
+import tls
 import vocab
 import proposals
 import bulk
@@ -43,7 +46,10 @@ PORT = int(os.environ.get("WINE_PORT", "8099"))
 DIRECT_PORT = int(os.environ.get("WINE_DIRECT_PORT", "8100"))
 # Home Assistant ingress always connects from the Supervisor's address; nothing else may use the ingress port.
 INGRESS_ADDRS = set(os.environ.get("WINE_INGRESS_ALLOW", "172.30.32.2,127.0.0.1").split(","))
-PUBLIC_FILES = {"/wc/style.css", "/wc/glass.svg"}  # needed by the login page
+# needed by the login page and for installing the app in the browser
+PUBLIC_FILES = {"/wc/style.css", "/wc/glass.svg", "/manifest.webmanifest", "/wc/icon-192.png", "/wc/icon-512.png",
+                "/wc/icon-maskable-512.png"}
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 OWN_PREFIX = os.environ.get("WINE_BARCODE_PREFIX", "999888777")
 INT_FIELDS = {"vintage", "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "archived",
               "peak_from_age", "peak_to_age"}
@@ -271,6 +277,18 @@ def start_lookup(d):
 class H(BaseHTTPRequestHandler):
     server_version = "WineCellar/1.6"
     user = None  # logged-in user on the direct port
+    plain_on_tls = False  # a plain http request on the https port: answered with a redirect
+
+    def setup(self):
+        ctx = getattr(self.server, "ssl_ctx", None)
+        if ctx is not None:
+            # TLS is set up here, in the request's own thread, so a slow client cannot block others
+            self.request.settimeout(120)
+            if self.request.recv(1, socket.MSG_PEEK) == b"\x16":  # TLS handshake record
+                self.request = ctx.wrap_socket(self.request, server_side=True)
+            else:
+                self.plain_on_tls = True
+        super().setup()
 
     def log_message(self, fmt, *args):
         if os.environ.get("WINE_DEBUG"):
@@ -303,6 +321,11 @@ class H(BaseHTTPRequestHandler):
         path = re.sub(r"/+", "/", u.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if self.plain_on_tls:
+                host = self.headers.get("Host") or ""
+                if not re.fullmatch(r"[\w.\-\[\]:]+", host):
+                    return self.send(400, {"error": "Use https."})
+                return self.send(301, "", "text/plain", {"Location": f"https://{host}{self.path}", "Connection": "close"})
             if getattr(self.server, "direct", False):
                 if not self.gate(method, path):
                     return
@@ -335,17 +358,21 @@ class H(BaseHTTPRequestHandler):
                 form = {k: v[0] for k, v in parse_qs(self.body().decode("utf-8", "replace")).items()}
                 user, err = auth.login(addr, form.get("username"), form.get("password"))
                 if user:
-                    self.send(303, "", "text/plain", {"Location": "/", "Set-Cookie": auth.make_cookie(user)})
+                    self.send(303, "", "text/plain", {"Location": "/", "Set-Cookie": auth.make_cookie(user, self.server.https)})
                 else:
-                    self.send(401, auth.login_page(err, VERSION), "text/html; charset=utf-8")
+                    self.send(401, auth.login_page(err, VERSION, self.server.own_ca), "text/html; charset=utf-8")
             else:
-                self.send(200, auth.login_page(None, VERSION), "text/html; charset=utf-8")
+                self.send(200, auth.login_page(None, VERSION, self.server.own_ca), "text/html; charset=utf-8")
             return False
         if path == "/logout":
             self.send(303, "", "text/plain", {"Location": "/login", "Set-Cookie": auth.clear_cookie()})
             return False
         if method == "GET" and path in PUBLIC_FILES:
             return True
+        if method == "GET" and path == "/ca.crt" and self.server.own_ca:
+            self.send(200, tls.ca_pem(), "application/x-x509-ca-cert",
+                      {"Content-Disposition": 'attachment; filename="wine-cellar-ca.crt"'})
+            return False
         self.user = auth.session_user(self.headers.get("Cookie"))
         if not self.user:
             if path.startswith("/api/"):
@@ -600,6 +627,20 @@ class H(BaseHTTPRequestHandler):
         return self.send(404, {"error": "not found"})
 
 
+class DirectServer(ThreadingHTTPServer):
+    """The direct-access port: HTTPS when a certificate is available (needed to install the app in Chrome)."""
+    daemon_threads = True
+    direct = True
+    ssl_ctx = None
+    https = own_ca = False
+
+    def handle_error(self, request, client_address):
+        err = __import__("sys").exc_info()[1]
+        if isinstance(err, (ssl.SSLError, ConnectionError, socket.timeout)):
+            return  # e.g. a plain http request on the https port, or an untrusted certificate
+        super().handle_error(request, client_address)
+
+
 def main():
     db.con()
     threading.Thread(target=ha_push_loop, daemon=True).start()
@@ -608,8 +649,14 @@ def main():
           flush=True)
     users = sorted(auth.allowed_users())
     print("Direct access users: " + (", ".join(users) if users else "none (direct access is off)"), flush=True)
-    direct = ThreadingHTTPServer(("0.0.0.0", DIRECT_PORT), H)
-    direct.direct = True
+    direct = DirectServer(("0.0.0.0", DIRECT_PORT), H)
+    try:
+        direct.ssl_ctx, direct.own_ca = tls.context()
+        direct.https = True
+        threading.Thread(target=tls.renew_loop, args=(direct,), daemon=True).start()
+    except Exception as e:  # noqa: BLE001
+        print("TLS setup failed, direct access uses plain http:", e, flush=True)
+    print(f"Direct access: {'https' if direct.https else 'http'} on port {DIRECT_PORT}", flush=True)
     threading.Thread(target=direct.serve_forever, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
 

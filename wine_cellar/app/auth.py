@@ -54,9 +54,10 @@ def _sign(payload):
     return hmac.new(_secret(), payload, hashlib.sha256).hexdigest()
 
 
-def make_cookie(user):
+def make_cookie(user, secure=False):
     payload = base64.urlsafe_b64encode(json.dumps([user, int(time.time()) + LIFETIME]).encode()).decode()
-    return (f"{COOKIE}={payload}.{_sign(payload.encode())}; Path=/; Max-Age={LIFETIME}; HttpOnly; SameSite=Lax")
+    return (f"{COOKIE}={payload}.{_sign(payload.encode())}; Path=/; Max-Age={LIFETIME}; HttpOnly; SameSite=Lax"
+            + ("; Secure" if secure else ""))
 
 
 def clear_cookie():
@@ -127,7 +128,7 @@ def login(addr, username, password):
     return user, None
 
 
-def login_page(error=None, version=""):
+def login_page(error=None, version="", own_ca=False):
     if not allowed_users():
         body = ('<p class="muted">Direct access is not set up. Add the Home Assistant users who may log in '
                 'under <b>allowed_users</b> in the app configuration.</p>')
@@ -139,11 +140,17 @@ def login_page(error=None, version=""):
   <button class="btn primary" type="submit">Log in</button>
 </form>
 <p class="muted small">Log in with your Home Assistant user.</p>"""
+        if own_ca:
+            body += ('<p class="muted small">Browser warns about the connection? '
+                     '<a href="ca.crt">Download the Wine Cellar certificate</a> and install it once on this device '
+                     '(see the app documentation).</p>')
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wine Cellar</title>
 <link rel="icon" href="wc/glass.svg?v={version}" type="image/svg+xml">
 <link rel="stylesheet" href="wc/style.css?v={version}">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7b2341">
 </head><body class="loginbody"><main class="loginbox">
 <h1><img src="wc/glass.svg?v={version}" alt="" width="22" height="22"> Wine Cellar</h1>
 {body}
