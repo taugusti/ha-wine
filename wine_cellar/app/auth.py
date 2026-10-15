@@ -110,7 +110,9 @@ def login(addr, username, password):
         return None, "Login is not available (no Supervisor token)."
     req = urllib.request.Request("http://supervisor/auth", method="POST",
                                  data=json.dumps({"username": user, "password": password}).encode(),
-                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+                                 # The Supervisor reads an Authorization header on /auth as the user's Basic credentials,
+                                 # so the app identifies itself with X-Supervisor-Token here.
+                                 headers={"X-Supervisor-Token": token, "Content-Type": "application/json"})
     try:
         urllib.request.urlopen(req, timeout=15).read()
     except urllib.error.HTTPError as e:

@@ -1,3 +1,6 @@
+# 1.19.2
+- Fixed: direct-access login was refused for every user, because the login check sent the app token in a header the Supervisor reads as the user's credentials.
+
 # 1.19.1
 - Refused direct-access logins are written to the app log with the reason (not in `allowed_users`, or refused by Home Assistant).
 
