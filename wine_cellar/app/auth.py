@@ -101,6 +101,7 @@ def login(addr, username, password):
     if locked_out(addr):
         return None, "Too many failed attempts. Try again in 15 minutes."
     if not user or not password or user not in allowed_users():
+        print(f"Direct access: login as '{user}' from {addr} refused: not in allowed_users", flush=True)
         _failed(addr)
         time.sleep(1)
         return None, "Wrong username or password."
@@ -114,6 +115,8 @@ def login(addr, username, password):
         urllib.request.urlopen(req, timeout=15).read()
     except urllib.error.HTTPError as e:
         if e.code in (400, 401, 403):
+            print(f"Direct access: login as '{user}' from {addr} refused by Home Assistant (unknown user, "
+                  "wrong password or user not active)", flush=True)
             _failed(addr)
             time.sleep(1)
             return None, "Wrong username or password."
