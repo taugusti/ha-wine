@@ -1,3 +1,7 @@
+# 1.21.0
+- Offers: each wine found now says whether you already have it. "You have this vintage: N bottles" when the same vintage is in the cellar, and "You have other vintages" with each vintage and its bottle count (tap one to open it). The match ignores the vintage and words like Château/Domaine, and uses the producer, so a slightly different name from the shop still matches.
+- "Open in cellar" is shown only for the same vintage; for another vintage you get "Add to cellar".
+
 # 1.20.0
 - **Filter** button next to the search field: filter the wine list on price (value or price paid, with quick ranges), grape, region, country, vintage, wine type, drinking status and wines with 0 bottles. On phones it opens as a sheet from the bottom, so the list keeps the screen; the button shows how many filters are on.
 - Active filters are shown as small chips under the search field; tap one to remove it, or "Clear all". Filters are remembered on the device.

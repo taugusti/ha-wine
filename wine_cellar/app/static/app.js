@@ -1096,6 +1096,7 @@ async function renderRecs() {
   try { r = await api("api/ai/recs"); } catch (e) { el.innerHTML = `<div class="panel wide"><p class="err">${esc(e.message)}</p></div>`; return; }
   const an = r.analysis, st = r.state || {}, last = r.last, run = st.status === "running";
   recsOffers = last?.offers || [];
+  if (recsOffers.length && !wines.length) { try { wines = await api("api/wines"); } catch { /* matching is optional */ } }
   const maxN = Math.max(an.per_year, ...Object.values(an.peak_by_year));
   const gapYears = new Set(an.gaps.flatMap((g) => Array.from({ length: g.to - g.from + 1 }, (_, i) => g.from + i)));
   const peakRows = Object.entries(an.peak_by_year).map(([y, n]) => `<div class="hb ${gapYears.has(Number(y)) ? "gap" : "st-peak"}">
@@ -1127,18 +1128,56 @@ async function renderRecs() {
   clearTimeout(recsTimer);
   if (run && $("#tab-recs").classList.contains("on")) recsTimer = setTimeout(renderRecs, 4000);
 }
+// 1.21: is an offered wine already in the cellar? Matched on the wine name without vintage (and producer),
+// so the card can say "same vintage in the cellar" or "you have other vintages of this wine".
+const nkey = (v) => fold(v).replace(/\b(19|20)\d\d\b/g, " ").replace(/\b(chateau|domaine|dom|ch)\b/g, " ").replace(/[^a-z0-9]+/g, "");
+function sameWine(w, o) {
+  const wd = nkey(w.description), od = nkey(o.wine), wp = nkey(w.producer), op = nkey(o.producer);
+  if (!wd || !od) return false;
+  const prodOk = !wp || !op || wp === op || wp.includes(op) || op.includes(wp);
+  if (!prodOk) return false;
+  if (wd === od || wd === op + od || wp + wd === od || wp + wd === op + od) return true;
+  // one name is the other plus a little more (e.g. an appellation added): only when the producer is known on both
+  return !!(wp && op) && Math.min(wd.length, od.length) >= 6 && (wd.includes(od) || od.includes(wd));
+}
+function cellarMatch(o) {
+  const hits = wines.filter((w) => sameWine(w, o));
+  const v = Number(o.vintage) || null;
+  const same = hits.filter((w) => v && Number(w.vintage) === v);
+  const other = hits.filter((w) => !same.includes(w)).sort((a, b) => (Number(b.vintage) || 0) - (Number(a.vintage) || 0));
+  return { same, other };
+}
+const btl = (n) => `${n} bottle${n === 1 ? "" : "s"}`;
+function ownedNote(m) {
+  if (!m.same.length && !m.other.length) return "";
+  const parts = [];
+  if (m.same.length) {
+    const n = m.same.reduce((s, w) => s + Math.max(0, w.stock), 0);
+    parts.push(`<div class="own same"><b>${n > 0 ? `You have this vintage: ${btl(n)}` : "You have had this vintage (0 bottles now)"}</b></div>`);
+  }
+  if (m.other.length) {
+    const inStock = m.other.filter((w) => w.stock > 0);
+    parts.push(`<div class="own other"><b>${m.same.length ? "Also other vintages" : "You have other vintages"}:</b> ${m.other.map((w) =>
+      `<button type="button" class="vlink ${w.stock > 0 ? "" : "zero"}" data-openw="${w.id}" title="${esc(w.description)}">${esc(w.vintage || "NV")} · ${w.stock > 0 ? btl(w.stock) : "0"}</button>`).join(" ")}
+      ${inStock.length ? "" : '<span class="muted">(none in stock)</span>'}</div>`);
+  }
+  return `<div class="owned">${parts.join("")}</div>`;
+}
+
 function offerCard(o, i) {
+  const m = cellarMatch(o), mine = m.same[0];
   const peak = o.peak_from_year ? (o.peak_from_year === o.peak_to_year ? o.peak_from_year : `${o.peak_from_year}–${o.peak_to_year}`) : null;
   return `<div class="panel offer">
     <div class="ohead"><div><div class="wname">${esc(o.wine)}${o.vintage && !String(o.wine).includes(o.vintage) ? " " + o.vintage : ""}</div>
       <div class="sub">${esc([o.producer, o.region, o.country].filter(Boolean).join(" · "))}</div></div>
       <div class="oprice"><b>${kr(o.price_dkk)}</b>${o.normal_price_dkk ? `<s>${kr(o.normal_price_dkk)}</s>` : ""}${o.discount_pct ? `<span class="disc">−${o.discount_pct}%</span>` : ""}</div></div>
     <div class="otags">${peak ? `<span class="chip s-peak">Peak ${peak}</span>` : ""}${o.fit ? '<span class="chip s-ready">Fills a gap</span>' : ""}
-      ${o.owned ? '<span class="chip s-now">Already in cellar</span>' : ""}${o.style ? `<span class="tag">${esc(o.style)}</span>` : ""}</div>
+      ${m.same.some((w) => w.stock > 0) ? '<span class="chip s-now">In cellar</span>' : m.other.length ? '<span class="chip s-young">Other vintage in cellar</span>' : ""}${o.style ? `<span class="tag">${esc(o.style)}</span>` : ""}</div>
+    ${ownedNote(m)}
     ${o.why ? `<p class="small">${esc(o.why)}</p>` : ""}
     <p class="small muted">${o.drink_from_year ? `Drink ${o.drink_from_year}–${o.drink_to_year}` : ""}${o.window_source ? ` · ${esc(o.window_source)}` : ""}${o.offer_ends ? ` · offer ends ${esc(o.offer_ends)}` : ""}</p>
     <div class="row"><a class="btn primary" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)} ↗</a>
-      ${o.owned ? `<button class="btn" data-openw="${o.owned}">Open in cellar</button>` : `<button class="btn" data-addoffer="${i}">Add to cellar</button>`}</div>
+      ${mine ? `<button class="btn" data-openw="${mine.id}">Open in cellar</button>` : `<button class="btn" data-addoffer="${i}">Add to cellar</button>`}</div>
   </div>`;
 }
 $("#tab-recs").addEventListener("click", async (e) => {

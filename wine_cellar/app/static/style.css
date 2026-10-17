@@ -448,3 +448,13 @@ body.noscroll { overflow: hidden; }
   .ffoot .btn { min-height: 44px; }
 }
 @keyframes fup { from { transform: translateY(40px); opacity: .6; } to { transform: none; opacity: 1; } }
+
+/* 1.21: offers already in the cellar */
+.owned { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 8px; font-size: 14px;
+  background: color-mix(in srgb, var(--young) 10%, transparent); border-left: 3px solid var(--young); }
+.owned .same b { color: var(--now); }
+.own.other { line-height: 1.9; }
+.vlink { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 1px 9px; font-size: 13px;
+  cursor: pointer; color: var(--text); white-space: nowrap; }
+.vlink:hover { border-color: var(--accent); color: var(--accent); }
+.vlink.zero { color: var(--muted); }
