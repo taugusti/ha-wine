@@ -1,3 +1,7 @@
+# 1.24.1
+- Offers: the offers that were left out (no product page found) now show their prices (per bottle, quantity, before price, other shops) and a **Search on Google** link, plus the link the agent gave.
+- Fixed: the "No offers with a confirmed product page" message was shown as code.
+
 # 1.24.0
 - Offers: the price is the offer price per bottle on the offer's terms, with "buying 6" when you must buy several to get it.
 - The struck-through "before" price says what it is: an earlier price, the price for 1 bottle, the list price (RRP) or the price at other shops.

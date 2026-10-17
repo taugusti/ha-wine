@@ -520,3 +520,6 @@ ul.rich.opts li.warn, ul.rich.opts li.linkok { font-size: 13px; }
 .chip.deal.good { color: var(--ready); }
 .chip.deal.dear { color: var(--over); }
 .oprice .disc.fake { color: var(--muted); text-decoration: line-through; }
+ul.dropped { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; color: var(--text); }
+ul.dropped li { padding-left: 10px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+ul.dropped s { color: var(--muted); }

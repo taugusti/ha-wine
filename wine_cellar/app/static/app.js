@@ -1151,7 +1151,8 @@ async function renderRecs() {
   let r;
   try { r = await api("api/ai/recs"); } catch (e) { el.innerHTML = `<div class="panel wide"><p class="err">${esc(e.message)}</p></div>`; return; }
   const an = r.analysis, st = r.state || {}, last = r.last, run = st.status === "running";
-  recsOffers = (last?.offers || []).filter((o) => (!o.checked || o.link_ok) && o.vintage);   // only offers with a confirmed shop page
+  recsOffers = (last?.offers || []).filter((o) => (!o.checked || o.link_ok) && o.vintage);
+  const dropped = [...(last?.dropped || []), ...(last?.offers || []).filter((o) => o.checked && !o.link_ok)];   // only offers with a confirmed shop page
   if (recsOffers.length && !wines.length) { try { wines = await api("api/wines"); } catch { /* matching is optional */ } }
   const maxN = Math.max(an.per_year, ...Object.values(an.peak_by_year));
   const gapYears = new Set(an.gaps.flatMap((g) => Array.from({ length: g.to - g.from + 1 }, (_, i) => g.from + i)));
@@ -1166,13 +1167,13 @@ async function renderRecs() {
       <div class="row">${run ? `<span><span class="spin"></span> ${esc(st.stage || "searching")} …</span><button class="btn" id="recsStop">Stop</button>`
         : `<button class="btn primary" id="recsGo">🔎 Find offers</button>`}
         ${last ? `<span class="small muted">Last search: ${esc(last.created)}${last.errors?.length ? ` · ${last.errors.length} searches failed` : ""}</span>` : ""}</div>
-      ${last?.dropped?.length ? `<details class="small" data-k="dropped"><summary class="muted">${last.dropped.length} offers left out: no product page found at the shop</summary>${tips(...last.dropped.map(esc))}</details>` : ""}
+      ${dropped.length ? `<details class="small" data-k="dropped"><summary class="muted">${dropped.length} offers left out: no product page found at the shop</summary><ul class="dropped">${dropped.map(droppedRow).join("")}</ul></details>` : ""}
       ${st.status === "error" ? `<p class="err small">${esc(st.error)}</p>` : ""}
       ${last?.errors?.length && !recsOffers.length && last.errors.every((e) => /429|quota/i.test(e)) ? '<p class="warn small">The Google AI quota is used up for now, so the search could not run. The free quota resets daily; try again later.</p>' : ""}
       ${last?.errors?.length ? `<details class="small" data-k="err"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
     </div>
     ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>`
-      : last.errors?.length && last.errors.every((e) => /429|quota/i.test(e)) ? "" : '<div class="panel wide"><p class="muted">${last.dropped?.length ? "No offers with a confirmed product page in the last search." : "No offers were found in the last search."}</p></div>') : ""}
+      : last.errors?.length && last.errors.every((e) => /429|quota/i.test(e)) ? "" : `<div class="panel wide"><p class="muted">${dropped.length ? "No offers with a confirmed product page in the last search." : "No offers were found in the last search."}</p></div>`) : ""}
     <div class="sgrid recs-top">
       <details class="panel fold" data-k="gaps"><summary><h2>Peak gaps</h2><span class="small muted">${an.gaps.length ? `Gaps: ${esc(gapTxt)}` : "No gaps"}</span></summary>
         ${tips(`You drink about <b>${an.per_year}</b> bottles a year`, "Gap = a year where fewer of today's bottles are at peak than that")}
@@ -1237,6 +1238,18 @@ function dealChip(o) {
   return { good: `<span class="chip deal good">Real deal${o.real_pct ? ` −${o.real_pct}%` : ""}</span>`,
     normal: '<span class="chip deal">Normal price</span>', dear: '<span class="chip deal dear">Dearer than other shops</span>',
     unchecked: '<span class="chip deal unk">Discount not checked</span>' }[o.verdict] || "";
+}
+// an offer that was left out (no product page found): name, prices and a Google search for it
+function droppedRow(o) {
+  if (typeof o === "string") return `<li>${esc(o)}</li>`;   // from before 1.24.1
+  const name = `${o.wine}${o.vintage && !String(o.wine).includes(o.vintage) ? " " + o.vintage : ""}`;
+  const q = encodeURIComponent(`${o.producer && !fold(o.wine).includes(fold(o.producer)) ? o.producer + " " : ""}${name} ${o.shop || ""} pris`);
+  const price = [o.price_dkk ? `<b>${kr(o.price_dkk)}</b> per bottle${o.offer_qty > 1 ? `, buying ${o.offer_qty}` : ""}` : "",
+    o.normal_price_dkk ? `<s>${kr(o.normal_price_dkk)}</s> ${esc(BEFORE[o.before_basis] || "before")}` : "",
+    o.market_price_dkk ? `other shops ${kr(o.market_price_dkk)}${o.market_shop ? ` (${esc(o.market_shop)})` : ""}` : ""].filter(Boolean).join(" · ");
+  return `<li><div><b>${esc(name)}</b> <span class="muted">· ${esc(o.shop || "")}</span></div>
+    ${price ? `<div>${price}</div>` : ""}
+    <div><a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">Search on Google ↗</a>${o.agent_url ? ` · <a href="${esc(o.agent_url)}" target="_blank" rel="noopener" class="muted">link the agent gave</a>` : ""}</div></li>`;
 }
 function offerCard(o, i) {
   const m = cellarMatch(o), mine = m.same[0];
