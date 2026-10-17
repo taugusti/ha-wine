@@ -279,8 +279,11 @@ def run(enrich):
         print(f"OFFERS: {len(offers)} from the agent, {len(cleaned)} kept after cleaning", flush=True)
         with _lock:
             _state.update(stage=f"checking {len(cleaned)} shop links")
-        cleaned = sort_offers(linkcheck.check_all(cleaned))
-        result = {"created": time.strftime("%Y-%m-%d %H:%M"), "analysis": an, "offers": cleaned,
+        checked = linkcheck.check_all(cleaned)
+        cleaned = sort_offers([o for o in checked if o.get("link_ok")])   # only offers with a confirmed product page
+        dropped = [f"{o.get('wine')} {o.get('vintage') or ''} ({o.get('shop')})".strip() for o in checked if not o.get("link_ok")]
+        print(f"OFFERS: {len(cleaned)} with a confirmed product page, {len(dropped)} left out: {dropped}", flush=True)
+        result = {"created": time.strftime("%Y-%m-%d %H:%M"), "analysis": an, "offers": cleaned, "dropped": dropped,
                   "errors": errors, "agent": agent}
         with db.lock():
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('recommendations', ?)", (json.dumps(result, ensure_ascii=False),))
@@ -303,7 +306,10 @@ def _recheck():
     try:
         res = last(con)
         if res and res.get("offers"):
-            res["offers"] = sort_offers(linkcheck.check_all(res["offers"]))
+            checked = linkcheck.check_all(res["offers"])
+            res["offers"] = sort_offers([o for o in checked if o.get("link_ok")])
+            res["dropped"] = (res.get("dropped") or []) + [f"{o.get('wine')} {o.get('vintage') or ''} ({o.get('shop')})".strip()
+                                                           for o in checked if not o.get("link_ok")]
             with db.lock():
                 con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('recommendations', ?)",
                             (json.dumps(res, ensure_ascii=False),))

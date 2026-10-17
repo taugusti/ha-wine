@@ -1148,7 +1148,7 @@ async function renderRecs() {
   let r;
   try { r = await api("api/ai/recs"); } catch (e) { el.innerHTML = `<div class="panel wide"><p class="err">${esc(e.message)}</p></div>`; return; }
   const an = r.analysis, st = r.state || {}, last = r.last, run = st.status === "running";
-  recsOffers = last?.offers || [];
+  recsOffers = (last?.offers || []).filter((o) => !o.checked || o.link_ok);   // only offers with a confirmed shop page
   if (recsOffers.length && !wines.length) { try { wines = await api("api/wines"); } catch { /* matching is optional */ } }
   const maxN = Math.max(an.per_year, ...Object.values(an.peak_by_year));
   const gapYears = new Set(an.gaps.flatMap((g) => Array.from({ length: g.to - g.from + 1 }, (_, i) => g.from + i)));
@@ -1163,12 +1163,13 @@ async function renderRecs() {
       <div class="row">${run ? `<span><span class="spin"></span> ${esc(st.stage || "searching")} …</span><button class="btn" id="recsStop">Stop</button>`
         : `<button class="btn primary" id="recsGo">🔎 Find offers</button>`}
         ${last ? `<span class="small muted">Last search: ${esc(last.created)}${last.errors?.length ? ` · ${last.errors.length} searches failed` : ""}</span>` : ""}</div>
+      ${last?.dropped?.length ? `<details class="small" data-k="dropped"><summary class="muted">${last.dropped.length} offers left out: no product page found at the shop</summary>${tips(...last.dropped.map(esc))}</details>` : ""}
       ${st.status === "error" ? `<p class="err small">${esc(st.error)}</p>` : ""}
       ${last?.errors?.length && !recsOffers.length && last.errors.every((e) => /429|quota/i.test(e)) ? '<p class="warn small">The Google AI quota is used up for now, so the search could not run. The free quota resets daily; try again later.</p>' : ""}
       ${last?.errors?.length ? `<details class="small" data-k="err"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
     </div>
     ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>`
-      : last.errors?.length && last.errors.every((e) => /429|quota/i.test(e)) ? "" : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}
+      : last.errors?.length && last.errors.every((e) => /429|quota/i.test(e)) ? "" : '<div class="panel wide"><p class="muted">${last.dropped?.length ? "No offers with a confirmed product page in the last search." : "No offers were found in the last search."}</p></div>') : ""}
     <div class="sgrid recs-top">
       <details class="panel fold" data-k="gaps"><summary><h2>Peak gaps</h2><span class="small muted">${an.gaps.length ? `Gaps: ${esc(gapTxt)}` : "No gaps"}</span></summary>
         ${tips(`You drink about <b>${an.per_year}</b> bottles a year`, "Gap = a year where fewer of today's bottles are at peak than that")}
