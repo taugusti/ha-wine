@@ -152,17 +152,35 @@ def _query(style, an):
     ])
 
 
-def _search(agent, q):
-    resp = ai._ha("POST", "/api/services/conversation/process?return_response",
-                  {"agent_id": agent, "language": "en", "text": q}, timeout=150)
-    r = (resp or {}).get("service_response", {}).get("response", {}) if isinstance(resp, dict) else {}
+def _ask(agent, text, conversation_id=None):
+    body = {"agent_id": agent, "language": "en", "text": text}
+    if conversation_id:
+        body["conversation_id"] = conversation_id
+    resp = ai._ha("POST", "/api/services/conversation/process?return_response", body, timeout=150)
+    sr = (resp or {}).get("service_response", {}) if isinstance(resp, dict) else {}
+    r = sr.get("response", {}) or {}
     speech = r.get("speech", {}).get("plain", {}).get("speech", "")
     if r.get("response_type") == "error":
         raise RuntimeError(speech[:300])
-    data = ai._json_from_text(speech)
+    return speech, sr.get("conversation_id")
+
+
+def _search(agent, q, label=""):
+    speech, conv = _ask(agent, q)
+    data = ai._json_from_text(speech, "offers")
     if not isinstance(data, dict):
-        raise RuntimeError("The search agent did not return JSON.")
-    return data.get("offers") or []
+        # the agent answered in prose (or the JSON broke): ask once more, in the same conversation, for the JSON only
+        print(f"OFFERS {label}: no JSON in the answer, asking again. Answer began: {speech[:400]!r}", flush=True)
+        speech, _ = _ask(agent, "Reply again with ONLY the JSON object in the format I asked for, no other text. "
+                                 "Include only offers with an exact product page URL. If you found none, reply "
+                                 '{"offers": []}', conv)
+        data = ai._json_from_text(speech, "offers")
+    if not isinstance(data, dict):
+        print(f"OFFERS {label}: still no JSON. Answer began: {speech[:400]!r}", flush=True)
+        raise RuntimeError("The search agent did not return JSON (twice).")
+    offers = data.get("offers") or []
+    print(f"OFFERS {label}: {len(offers)} offers from the agent", flush=True)
+    return offers
 
 
 def _num(v):
@@ -249,13 +267,14 @@ def run(enrich):
             with _lock:
                 _state.update(stage=f"searching offers: {label} ({i + 1}/{len(styles)})")
             try:
-                for o in _search(agent, _query(st, an)):
+                for o in _search(agent, _query(st, an), label):
                     if isinstance(o, dict):
                         o["_style"] = label
                         offers.append(o)
             except Exception as e:  # noqa: BLE001
                 errors.append(f"{label}: {str(e)[:160]}")
         cleaned = clean_offers(offers, an, owned)
+        print(f"OFFERS: {len(offers)} from the agent, {len(cleaned)} kept after cleaning", flush=True)
         with _lock:
             _state.update(stage=f"checking {len(cleaned)} shop links")
         cleaned = sort_offers(linkcheck.check_all(cleaned))

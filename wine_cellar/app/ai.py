@@ -92,15 +92,40 @@ def search_entity():
     return None
 
 
-def _json_from_text(t):
+def _json_from_text(t, want=None):
+    """The first JSON object in a model answer: also inside ```json fences, after prose, or cut off (a truncated
+    list of offers is closed after the last complete item)."""
     t = (t or "").strip()
-    m = re.search(r"\{.*\}", t, re.S)
-    if not m:
+    t = re.sub(r"```(?:json)?", "", t)
+    dec = json.JSONDecoder()
+    first = None
+    for m in re.finditer(r"\{", t):
+        try:
+            obj, _ = dec.raw_decode(t[m.start():])
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and (not want or want in obj):
+            return obj
+        if isinstance(obj, dict) and first is None:
+            first = obj
+    # truncated answer: keep the complete items of the first list
+    i = t.find("{")
+    if i < 0:
         return None
-    try:
-        return json.loads(m.group(0))
-    except ValueError:
-        return None
+    body = t[i:]
+    for cut in range(len(body), 0, -1):
+        if body[cut - 1] != "}":
+            continue
+        for tail in ("]}", "}]}", "]}}"):
+            try:
+                obj = json.loads(body[:cut] + tail)
+                if isinstance(obj, dict) and (not want or want in obj):
+                    return obj
+            except ValueError:
+                pass
+        if len(body) - cut > 4000:
+            break
+    return first
 
 
 def web_search(agent, s):

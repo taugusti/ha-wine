@@ -1,3 +1,8 @@
+# 1.23.1
+- Fixed: Find offers failed with "The search agent did not return JSON" when the agent wrapped its answer in text or code fences, or the answer was cut off. The answer is now read more robustly (a cut-off list keeps its complete offers), and if there is still no JSON the app asks the agent once more in the same conversation for the JSON only. What the agent answered is written to the app log.
+- Offers and Review: sections you unfold stay open while a search or review is running (the page refreshes every few seconds).
+- "No offers were found" is also shown when some of the searches failed.
+
 # 1.23.0
 - **Easier to read texts**: About, drinking advice, serving and "window based on" are shown as short points with bold labels instead of a block of prose. Older texts are split into one point per sentence. Help texts in the app are short lists too.
 - **About the wine** now has points for the **area**, the **estate** (château/domaine) and the **producer**, with a true **anecdote** last when there is one. New lookups write it this way.

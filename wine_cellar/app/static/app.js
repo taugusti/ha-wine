@@ -1155,6 +1155,8 @@ async function renderRecs() {
       <span>${y}</span><span class="t" style="width:${(n / maxN) * 100}%"></span><span class="n">${n}</span></div>`).join("");
   const gapTxt = an.gaps.length ? an.gaps.map((g) => (g.from === g.to ? g.from : `${g.from}–${g.to}`)).join(", ") : "none";
   const top = an.styles[0];
+  // re-rendered every few seconds while a search runs: keep what the user has unfolded, and the scroll position
+  const keepOpen = new Set($$("details[data-k]", el).filter((d) => d.open).map((d) => d.dataset.k)), sy = scrollY;
   el.innerHTML = `
     <div class="panel recsbar">
       <div class="row">${run ? `<span><span class="spin"></span> ${esc(st.stage || "searching")} …</span><button class="btn" id="recsStop">Stop</button>`
@@ -1162,23 +1164,25 @@ async function renderRecs() {
         ${last ? `<span class="small muted">Last search: ${esc(last.created)}${last.errors?.length ? ` · ${last.errors.length} searches failed` : ""}</span>` : ""}</div>
       ${st.status === "error" ? `<p class="err small">${esc(st.error)}</p>` : ""}
       ${last?.errors?.length && !recsOffers.length && last.errors.every((e) => /429|quota/i.test(e)) ? '<p class="warn small">The Google AI quota is used up for now, so the search could not run. The free quota resets daily; try again later.</p>' : ""}
-      ${last?.errors?.length ? `<details class="small"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
+      ${last?.errors?.length ? `<details class="small" data-k="err"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
     </div>
     ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>`
-      : last.errors?.length ? "" : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}
+      : last.errors?.length && last.errors.every((e) => /429|quota/i.test(e)) ? "" : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}
     <div class="sgrid recs-top">
-      <details class="panel fold"><summary><h2>Peak gaps</h2><span class="small muted">${an.gaps.length ? `Gaps: ${esc(gapTxt)}` : "No gaps"}</span></summary>
+      <details class="panel fold" data-k="gaps"><summary><h2>Peak gaps</h2><span class="small muted">${an.gaps.length ? `Gaps: ${esc(gapTxt)}` : "No gaps"}</span></summary>
         ${tips(`You drink about <b>${an.per_year}</b> bottles a year`, "Gap = a year where fewer of today's bottles are at peak than that")}
         <div class="hbars target" style="--target:${(an.per_year / maxN) * 100}%">${peakRows}</div></details>
-      <details class="panel fold"><summary><h2>What you buy most</h2><span class="small muted">${top ? `${esc(top.type)} · ${esc(top.area)}${an.styles.length > 1 ? ` +${an.styles.length - 1}` : ""}` : ""}</span></summary>
-        <ul class="styles">${an.styles.map((x) => { const subs = (x.subregions || []).filter((r) => r.name !== "(no sub-region)" || x.subregions.length > 1);
-          return `<li><details class="sty"><summary><span><b>${esc(x.type)} · ${esc(x.area)}</b> <span class="muted">${x.area !== x.country ? esc(x.country) + " · " : ""}${x.bottles} bottles</span></span></summary>
+      <details class="panel fold" data-k="styles"><summary><h2>What you buy most</h2><span class="small muted">${top ? `${esc(top.type)} · ${esc(top.area)}${an.styles.length > 1 ? ` +${an.styles.length - 1}` : ""}` : ""}</span></summary>
+        <ul class="styles">${an.styles.map((x, si) => { const subs = (x.subregions || []).filter((r) => r.name !== "(no sub-region)" || x.subregions.length > 1);
+          return `<li><details class="sty" data-k="sty-${esc(x.type)}-${esc(x.area)}"><summary><span><b>${esc(x.type)} · ${esc(x.area)}</b> <span class="muted">${x.area !== x.country ? esc(x.country) + " · " : ""}${x.bottles} bottles</span></span></summary>
           ${tips(x.producers.length ? `Producers: ${esc(x.producers.slice(0, 3).join(", "))}` : "", x.paid_median ? `Usually paid ${kr(x.paid_median)}${x.value_median ? ` for a value of ${kr(x.value_median)}` : ""}` : "",
             x.grapes?.length ? `Grapes: ${esc(x.grapes.join(", "))}` : "")}
           ${subs.length ? `<table class="subreg"><thead><tr><th>Region</th><th class="num">Bought</th><th class="num">In stock</th></tr></thead><tbody>
             ${subs.map((r) => `<tr><td>${esc(r.name)}${r.producers.length ? `<div class="sub">${esc(r.producers.join(", "))}</div>` : ""}</td><td class="num">${r.bottles}</td><td class="num">${r.stock}</td></tr>`).join("")}</tbody></table>` : ""}
           </details></li>`; }).join("")}</ul></details>
     </div>`;
+  $$("details[data-k]", el).forEach((d) => { if (keepOpen.has(d.dataset.k)) d.open = true; });
+  if (scrollY !== sy) scrollTo(0, sy);
   if (!run && recsOffers.some((o) => !o.checked) && !renderRecs.checking) {   // results from before 1.22: check their links once
     renderRecs.checking = true;
     try { await send("api/ai/recs/check", "POST", {}); setTimeout(renderRecs, 1500); } catch { /* ignore */ }
@@ -1330,7 +1334,7 @@ async function renderBulk() {
   el.innerHTML = `${head ? `<p>${head}</p>` : ""}
     <div class="row">${run ? '<button class="btn" id="bulkCancel">Stop</button>' : '<button class="btn primary" id="bulkStart">Review drinking windows</button><button class="btn" id="bulkAbout">Write About texts</button>'}
       ${newer ? '<button class="btn" id="bulkShow">Show new suggestions</button>' : ""}</div>
-    ${st.log && st.log.length ? `<details><summary class="muted">Log</summary><pre class="small">${esc(st.log.join("\n"))}</pre></details>` : ""}`;
+    ${st.log && st.log.length ? `<details data-k="log" ${$('#bulkStatus details[data-k="log"]')?.open ? "open" : ""}><summary class="muted">Log</summary><pre class="small">${esc(st.log.join("\n"))}</pre></details>` : ""}`;
   updateReviewCount();
   clearTimeout(bulkTimer);
   if (run && $("#tab-review").classList.contains("on")) bulkTimer = setTimeout(renderBulk, 5000);
