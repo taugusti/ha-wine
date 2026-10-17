@@ -33,7 +33,8 @@ function points(t) {
       else lines.push(x);
     }
   }
-  return lines.map((l) => l.replace(/^[-•*]\s*/, "").replace(/\*\*/g, "")).filter(Boolean);
+  return lines.flatMap((l) => (l.length > 140 && l.includes("; ") ? l.split(/;\s+/) : [l]))
+    .map((l) => l.replace(/^[-•*]\s*/, "").replace(/\*\*/g, "").replace(/^./, (c) => c.toUpperCase())).filter(Boolean);
 }
 function rich(t) {
   const pts = points(t);
@@ -1236,11 +1237,15 @@ function offerCard(o, i) {
     <div class="otags">${peak ? `<span class="chip s-peak">Peak ${peak}</span>` : ""}${o.fit ? '<span class="chip s-ready">Fills a gap</span>' : ""}
       ${m.same.some((w) => w.stock > 0) ? '<span class="chip s-now">In cellar</span>' : m.other.length ? '<span class="chip s-young">Other vintage in cellar</span>' : ""}${o.style ? `<span class="tag">${esc(o.style)}</span>` : ""}</div>
     ${ownedNote(m)}
-    ${o.why ? `<div class="small">${rich(o.why)}</div>` : ""}
-    <p class="small muted">${o.drink_from_year ? `Drink ${o.drink_from_year}–${o.drink_to_year}` : ""}${o.window_source ? ` · ${esc(o.window_source)}` : ""}${o.offer_ends ? ` · offer ends ${esc(o.offer_ends)}` : ""}</p>
-    ${o.price_note ? `<p class="small warn">Price now: ${esc(o.price_note)}</p>` : ""}
-    ${o.checked ? (o.link_ok ? `<p class="small linkok">✓ Product page found at ${esc(o.shop)}</p>`
-      : `<p class="small warn">Not found on ${esc(o.shop)}'s site, so the offer may be gone or wrong. The button searches the shop.</p>`) : ""}
+    <ul class="rich opts">
+      ${points(o.why).map((x) => `<li>${esc(x)}</li>`).join("")}
+      ${o.drink_from_year ? `<li><b>Drink:</b> ${o.drink_from_year}–${o.drink_to_year}${peak ? `, peak ${peak}` : ""}</li>` : ""}
+      ${points(o.window_source).map((x, j) => `<li>${j ? "" : "<b>Window from:</b> "}${esc(x)}</li>`).join("")}
+      ${o.offer_ends ? `<li><b>Offer ends:</b> ${esc(o.offer_ends)}</li>` : ""}
+      ${o.price_note ? `<li class="warn"><b>Price now:</b> ${esc(o.price_note)}</li>` : ""}
+      ${o.checked ? (o.link_ok ? `<li class="linkok">✓ Product page found at ${esc(o.shop)}</li>`
+        : `<li class="warn">Not found on ${esc(o.shop)}'s site: the offer may be gone or wrong. The button searches the shop.</li>`) : ""}
+    </ul>
     <div class="row"><a class="btn ${o.link_ok ? "primary" : ""}" href="${esc(o.url)}" target="_blank" rel="noopener">${o.checked && !o.link_ok ? `Search ${esc(o.shop)}` : esc(o.shop)} ↗</a>
       ${mine ? `<button class="btn" data-openw="${mine.id}">Open in cellar</button>` : `<button class="btn" data-addoffer="${i}">Add to cellar</button>`}</div>
   </div>`;

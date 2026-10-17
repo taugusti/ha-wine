@@ -1,3 +1,7 @@
+# 1.23.2
+- Offers: the text on each offer is now one list of short points: why it fits, drinking window and peak, where the window comes from, when the offer ends, the price on the shop's page and whether the product page was found. Prose answers from the agent are split into points.
+- The search agent is asked for short, bulleted reasons and a few words for the window's source.
+
 # 1.23.1
 - Fixed: Find offers failed with "The search agent did not return JSON" when the agent wrapped its answer in text or code fences, or the answer was cut off. The answer is now read more robustly (a cut-off list keeps its complete offers), and if there is still no JSON the app asks the agent once more in the same conversation for the JSON only. What the agent answered is written to the app log.
 - Offers and Review: sections you unfold stay open while a search or review is running (the page refreshes every few seconds).

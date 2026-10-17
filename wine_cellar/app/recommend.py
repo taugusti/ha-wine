@@ -148,7 +148,9 @@ def _query(style, an):
         ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "normal_price_dkk": number or null,',
         ' "offer_ends": str or null, "drink_from_year": int, "drink_to_year": int, "peak_from_year": int,',
         ' "peak_to_year": int, "window_source": str, "why": str}]}',
-        'where "why" is 2-3 short bullet lines, each starting with "- " (why it fits the buyer, the peak, the deal).',
+        'where "why" is 2-3 short bullet lines, each starting with "- " (why it fits the buyer, the peak, the deal),',
+        'and "window_source" is a few words naming where the drinking window comes from (e.g. "Wine Spectator",',
+        '"producer", "estimate from the vintage"). Keep every text short and plain.',
     ])
 
 

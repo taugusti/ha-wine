@@ -510,3 +510,5 @@ a.crit:hover { outline: 1px solid var(--accent); }
 .nocrit { margin: 8px 0 0; }
 .fbody > label.chk { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
 .fbody > label.chk input { width: 20px; height: 20px; margin: 0; }
+ul.rich.opts { font-size: 14px; margin: 2px 0; }
+ul.rich.opts li.warn, ul.rich.opts li.linkok { font-size: 13px; }
