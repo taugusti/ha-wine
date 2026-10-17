@@ -58,7 +58,11 @@
   <section id="tab-data" class="tab">
     <div class="panel">
       <h2>Import from Excel</h2>
-      <p>Choose your <code>vindatabase.xlsm</code>. Wines are matched on barcode (otherwise description + vintage) and updated. All movements from the <em>Lager</em> sheet are replaced, so you can run the import again and again while Excel is still your primary database.</p>
+      <ul class="tips">
+        <li>Choose your <code>vindatabase.xlsm</code></li>
+        <li>Wines are matched on barcode (otherwise description + vintage) and updated</li>
+        <li>All movements from the <em>Lager</em> sheet are replaced, so the import can be run again and again</li>
+      </ul>
       <p id="metaInfo" class="muted"></p>
       <div class="row">
         <input type="file" id="xfile" accept=".xlsm,.xlsx">
@@ -72,12 +76,18 @@
     </div>
     <div class="panel">
       <h2>Clean up values</h2>
-      <p>Countries, regions, grapes, producers and shops are kept in one consistent spelling. New values are matched to existing ones when you save or import.</p>
+      <ul class="tips">
+        <li>Countries, regions, grapes, producers and shops are kept in one spelling</li>
+        <li>New values are matched to existing ones when you save or import</li>
+      </ul>
       <div id="cleanup"></div>
     </div>
     <div class="panel">
       <h2>Export</h2>
-      <p>The database is included in Home Assistant backups. You can also download the data directly here.</p>
+      <ul class="tips">
+        <li>The database is included in Home Assistant backups</li>
+        <li>Or download the data here</li>
+      </ul>
       <div class="row">
         <a class="btn" href="api/export.csv">Wines as CSV (Excel)</a>
         <a class="btn" href="api/export.json">Full backup (JSON)</a>
@@ -110,6 +120,7 @@
 <div class="fsheet" id="fSheet" hidden>
   <div class="fbox" role="dialog" aria-modal="true" aria-labelledby="fTitle">
     <div class="fhead"><h3 id="fTitle">Filter</h3><button class="btn icon" id="fClose" aria-label="Close">✕</button></div>
+    <div class="fchips insheet" id="fSheetChips" hidden></div>
     <div class="fbody">
       <div class="frow2">
         <label>Country<select id="fCountry"><option value="">All</option></select></label>
@@ -123,6 +134,10 @@
       </div>
       <div class="fgroup"><span class="flabel">Vintage</span>
         <div class="frange"><input type="number" id="fVmin" inputmode="numeric" placeholder="From"><span>–</span><input type="number" id="fVmax" inputmode="numeric" placeholder="To"></div>
+      </div>
+      <div class="fgroup"><span class="flabel">Critic score</span>
+        <div class="seg" id="fCrit"><button type="button" data-c="" class="on">Any critic</button><button type="button" data-c="rp" title="Wine Advocate (Robert Parker)">WA</button><button type="button" data-c="ws" title="Wine Spectator">WS</button><button type="button" data-c="js" title="James Suckling">JS</button></div>
+        <div class="fquick" id="fSq"><button type="button" data-s="1">Has a score</button><button type="button" data-s="90">90+</button><button type="button" data-s="92">92+</button><button type="button" data-s="94">94+</button><button type="button" data-s="96">96+</button></div>
       </div>
       <div class="fgroup"><span class="flabel">Type</span><div class="fquick" id="fType"></div></div>
       <div class="fgroup"><span class="flabel">Drinking status</span><div class="fquick" id="fStatus"></div></div>

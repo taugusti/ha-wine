@@ -422,7 +422,8 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, {"state": recommend.status()})
         if path == "/api/ai/bulk":
             if method == "POST":
-                bulk.start(only_missing=bool(self.json_body().get("only_missing", True)))
+                d = self.json_body()
+                bulk.start(only_missing=bool(d.get("only_missing", True)), mode="about" if d.get("mode") == "about" else "window")
             return self.send(200, bulk.status())
         if path == "/api/ai/bulk/cancel" and method == "POST":
             bulk.cancel()

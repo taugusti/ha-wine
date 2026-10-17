@@ -53,6 +53,24 @@ def candidates(con, only_missing=True):
     return [w for w in out if w["id"] not in done]
 
 
+ABOUT = "About the wine"
+
+
+def about_candidates(con):
+    """Wines in stock whose About text is missing or not yet in the area / estate / producer format."""
+    rows = con.execute("""SELECT w.* FROM wine w JOIN (SELECT wine_id, SUM(qty) s FROM movement GROUP BY wine_id) m
+                          ON m.wine_id = w.id WHERE m.s > 0 AND w.archived = 0 ORDER BY w.description""").fetchall()
+    return [dict(r) for r in rows if "- Area:" not in (r["info"] or "")]
+
+
+def _one_about(con, wine):
+    text = ai.about(con, wine)
+    if "- " not in text:
+        return []
+    # applied right away; the old text is kept in the proposal history (Review tab)
+    return [{"wine_id": wine["id"], "topic": ABOUT, "changes": {"info": text}, "reason": "", "apply": True}]
+
+
 def build_changes(wine, s):
     """Drinking window + peak from a lookup result, adjusted to the wine's current window when they are close."""
     ch = {k: s.get(k) for k in WINDOW if s.get(k) not in (None, "")}
@@ -111,14 +129,16 @@ def _one(con, wine):
     return items
 
 
-def run(only_missing=True, pause=4):
+def run(only_missing=True, pause=4, mode="window"):
     con = db.connect()
     try:
         started = time.time()
-        wines = candidates(con, only_missing)
-        _set(status="running", total=len(wines), done=0, suggested=0, skipped=0, errors=0, current=None,
+        wines = about_candidates(con) if mode == "about" else candidates(con, only_missing)
+        one = _one_about if mode == "about" else _one
+        _set(status="running", mode=mode, total=len(wines), done=0, suggested=0, skipped=0, errors=0, current=None,
              started=started, finished=None, log=[])
-        _log(f"Started: {len(wines)} wines in stock" + (" without a peak" if only_missing else ""))
+        _log(f"Started: {len(wines)} wines in stock" + (" without an About text in the new format" if mode == "about"
+                                                         else " without a peak" if only_missing else ""))
         quota_fails = 0
         for i, wine in enumerate(wines):
             if _cancel.is_set():
@@ -129,7 +149,7 @@ def run(only_missing=True, pause=4):
                 if _cancel.is_set():
                     break
                 try:
-                    items = _one(con, wine)
+                    items = one(con, wine)
                     err = None
                     break
                 except Exception as e:  # noqa: BLE001
@@ -164,7 +184,7 @@ def run(only_missing=True, pause=4):
             else:
                 quota_fails = 0
                 _set(skipped=_state["skipped"] + 1)
-                _log(f"No peak found: {name}")
+                _log(f"{'No text' if mode == 'about' else 'No peak found'}: {name}")
             _set(done=i + 1)
             time.sleep(pause)
         _set(status="cancelled" if _cancel.is_set() else "done", current=None, finished=time.time())
@@ -176,14 +196,14 @@ def run(only_missing=True, pause=4):
         con.close()
 
 
-def start(only_missing=True):
+def start(only_missing=True, mode="window"):
     with _lock:
         if _state.get("status") == "running":
             raise ValueError("A bulk review is already running.")
         _state.clear()
-        _state["status"] = "running"
+        _state.update(status="running", mode=mode)
     _cancel.clear()
-    threading.Thread(target=run, args=(only_missing,), daemon=True).start()
+    threading.Thread(target=run, kwargs={"only_missing": only_missing, "mode": mode}, daemon=True).start()
 
 
 def cancel():

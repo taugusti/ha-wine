@@ -472,3 +472,41 @@ details.fold[open] > summary::after { content: "▾"; }
 details.fold[open] > summary { margin-bottom: 10px; }
 .linkok { color: var(--ready); }
 .offer.unconfirmed { opacity: .8; }
+
+/* 1.23: text as points */
+ul.rich, ul.tips { margin: 4px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+ul.rich li, ul.tips li { line-height: 1.4; }
+ul.rich li::marker, ul.tips li::marker { color: var(--accent); }
+ul.rich li b { color: var(--text); font-weight: 600; }
+ul.rich li.anec { font-style: italic; }
+ul.rich li.anec b { font-style: normal; }
+ul.tips { color: var(--muted); font-size: 13px; }
+p.rich1 { margin: 2px 0; }
+.ovtext section h4 { margin: 0 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.ovtext section + section { margin-top: 6px; }
+.ovtext { gap: 4px; }
+table.sugg textarea { width: 100%; min-height: 110px; font-size: 13px; }
+table.sugg td ul.rich { font-size: 13px; padding-left: 16px; }
+/* what you buy most: unfold per style */
+ul.styles details.sty > summary { cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: baseline; }
+ul.styles details.sty > summary::-webkit-details-marker { display: none; }
+ul.styles details.sty > summary::before { content: "▸"; color: var(--muted); font-size: 12px; }
+ul.styles details.sty[open] > summary::before { content: "▾"; }
+ul.styles details.sty[open] { padding-bottom: 6px; }
+table.subreg { margin-top: 4px; font-size: 13px; }
+table.subreg th { cursor: default; padding: 4px 6px; font-size: 11px; }
+table.subreg td { padding: 4px 6px; }
+table.subreg tbody tr { cursor: default; }
+table.subreg tbody tr:hover { background: none; }
+
+/* 1.23: removable filters inside the sheet, critic scores on the wine */
+.fchips.insheet { padding: 0 18px 8px; margin: 0; border-bottom: 1px solid var(--line); }
+.crits { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+.crit { display: flex; flex-direction: column; align-items: center; min-width: 92px; padding: 6px 10px; border-radius: 10px;
+  background: var(--surface2); text-decoration: none; color: var(--text); }
+.crit b { font: 600 24px var(--serif); color: var(--accent); line-height: 1.1; }
+.crit span { font-size: 11px; color: var(--muted); text-align: center; }
+a.crit:hover { outline: 1px solid var(--accent); }
+.nocrit { margin: 8px 0 0; }
+.fbody > label.chk { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.fbody > label.chk input { width: 20px; height: 20px; margin: 0; }

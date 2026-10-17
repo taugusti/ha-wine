@@ -225,6 +225,49 @@ def barcode_info(code):
         return None
 
 
+INFO_DESC = (
+    "About the wine as short labelled bullet lines, each line starting with '- ' (no other text):\n"
+    "- Area: 1-2 sentences about the region/appellation: where it is, soils and climate, the style of its wines.\n"
+    "- Estate: 1-2 sentences about the château/domaine/estate and its vineyards (size, location, classification, "
+    "history).\n"
+    "- Producer: 1-2 sentences about who makes the wine (family, owner, winemaker, style). Leave this line out if it "
+    "would only repeat the estate line.\n"
+    "- Anecdote: one fun or surprising story about the estate, producer, wine or its name, as the LAST line. Only "
+    "real, well-documented stories; never invent one. Leave the line out if you do not know a true one.\n"
+    "Plain, easy to read; no marketing language.")
+
+
+def bullets(text):
+    """Normalize AI text to one '- ' bullet per line (keeps old prose untouched when it has no lines)."""
+    if not text:
+        return text
+    lines = [ln.strip() for ln in str(text).replace("\r", "").split("\n") if ln.strip()]
+    if len(lines) == 1 and not re.match(r"^[-•*]\s", lines[0]):
+        return lines[0]
+    return "\n".join("- " + re.sub(r"^[-•*]\s*", "", ln).replace("**", "") for ln in lines)
+
+
+def about(con, wine):
+    """Write the 'About the wine' text (area, estate, producer, anecdote) for one wine with the AI Task."""
+    entity = ai_entity()
+    if not entity:
+        raise RuntimeError("No AI Task entity found in Home Assistant.")
+    facts = {k: wine.get(k) for k in ("description", "producer", "vintage", "country", "region", "grapes", "wine_type")
+             if wine.get(k) not in (None, "")}
+    prompt = "\n".join([
+        "Write the 'About the wine' text for this wine in a private wine cellar database.",
+        f"The wine: {json.dumps(facts, ensure_ascii=False)}",
+        "Write in English.",
+    ])
+    payload = {"entity_id": entity, "task_name": "wine cellar about text", "instructions": prompt,
+               "structure": {"info": _t(INFO_DESC)}}
+    resp = _ha("POST", "/api/services/ai_task/generate_data?return_response", payload, timeout=120)
+    data = (resp or {}).get("service_response", {}).get("data") if isinstance(resp, dict) else None
+    if not isinstance(data, dict) or not str(data.get("info") or "").strip():
+        raise RuntimeError("The AI Task returned no text.")
+    return bullets(data["info"])
+
+
 def _t(desc):
     return {"selector": {"text": {}}, "description": desc}
 
@@ -246,17 +289,18 @@ STRUCTURE = {
     "drink_to_age": _n("Drinking window end, in years after the vintage (before it is past its best)"),
     "peak_from_age": _n("Start of the optimal/peak period, in years after the vintage"),
     "peak_to_age": _n("End of the optimal/peak period, in years after the vintage"),
-    "window_basis": _t("What the drinking window is based on, naming the specifics: a critic's or the producer's published "
-                       "window, this producer's style and track record (traditional/modern, extraction, oak), the cuvée's "
-                       "level (grand vin, second wine, entry level, single vineyard), the vintage's character, bottle size, "
-                       "or only general appellation norms"),
-    "advice": _t("One or two sentences of drinking advice for this specific wine"),
-    "serving": _t("Short serving advice: temperature, decanting"),
+    "window_basis": _t("What the drinking window is based on, as 2-4 short bullet lines, each starting with '- ': a critic's "
+                       "or the producer's published window, this producer's style and track record (traditional/modern, "
+                       "extraction, oak), the cuvée's level (grand vin, second wine, entry level, single vineyard), the "
+                       "vintage's character, bottle size, or only general appellation norms"),
+    "advice": _t("Drinking advice for this specific wine as 1-3 short bullet lines, each starting with '- '"),
+    "serving": _t("Serving advice as short bullet lines, each starting with '- ': '- Temperature: …', '- Decanting: …', "
+                  "'- Food: …'"),
     "list_price": _n("Estimated typical Danish retail price for ONE bottle of this size, in DKK incl. VAT, excluding "
                      "shipping and without quantity discounts; 0 if you cannot estimate it"),
     "quantity": _n("Number of bottles bought according to the invoice text, or 0 if not present"),
     "shop": _t("Wine shop / seller if it can be seen from the invoice text, else empty"),
-    "info": _t("2-4 sentences of interesting knowledge about the wine, producer or area"),
+    "info": _t(INFO_DESC),
     "rp_score": _t("Robert Parker Wine Advocate score for this exact vintage, e.g. '92' or '91-93'; empty if you do not know a published score"),
     "rp_url": _t("URL where that Wine Advocate score is published; empty if unknown"),
     "ws_score": _t("Wine Spectator score for this exact vintage; empty if unknown"),
@@ -379,6 +423,9 @@ def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, pro
     if not isinstance(data, dict):
         raise RuntimeError("The AI Task returned no structured data.")
     s = _clean(data)
+    for k in ("info", "advice", "serving", "window_basis"):
+        if isinstance(s.get(k), str):
+            s[k] = bullets(s[k])
     n = vocab.Normalizer(con)
     n.wine(s)
     if s.get("description"):

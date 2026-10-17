@@ -32,7 +32,7 @@ def add(con, items):
             continue
         old = {k: row[k] for k in changes}
         empty = all(row[k] in (None, "") for k in changes)
-        status = "applied" if (it.get("apply_if_empty") and empty) else "pending"
+        status = "applied" if it.get("apply") or (it.get("apply_if_empty") and empty) else "pending"
         if status == "applied":
             _apply(con, row["id"], changes)
         # replace an older pending proposal for the same wine and topic

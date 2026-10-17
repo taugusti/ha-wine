@@ -44,7 +44,8 @@ def analysis(con, enrich):
     weight = lambda w: max(w["bought"], w["stock"], 0)  # noqa: E731
 
     styles = Counter()
-    style_info = defaultdict(lambda: {"producers": Counter(), "grapes": Counter(), "paid": [], "value": [], "examples": Counter()})
+    style_info = defaultdict(lambda: {"producers": Counter(), "grapes": Counter(), "paid": [], "value": [], "examples": Counter(),
+                                      "sub": Counter(), "sub_stock": Counter(), "sub_prod": defaultdict(Counter)})
     producers, grapes = Counter(), Counter()
     for w in wines:
         n = weight(w)
@@ -64,18 +65,27 @@ def analysis(con, enrich):
         if w.get("list_price"):
             si["value"] += [w["list_price"]] * n
         si["examples"][w["description"]] += n
+        parts = vocab.split_parts(w.get("region"))
+        sub = ", ".join(parts[1:]) if len(parts) > 1 else "(no sub-region)"
+        si["sub"][sub] += n
+        si["sub_stock"][sub] += max(0, w["stock"])
+        if w.get("producer"):
+            si["sub_prod"][sub][w["producer"]] += n
 
     def med(xs):
         return round(statistics.median(xs)) if xs else None
 
     top = []
-    for key, n in styles.most_common(4):
+    for key, n in styles.most_common(8):
         si = style_info[key]
         top.append({"country": key[0], "area": key[1], "type": key[2], "bottles": n,
                     "producers": [p for p, _ in si["producers"].most_common(5)],
                     "grapes": [g for g, _ in si["grapes"].most_common(4)],
                     "paid_median": med(si["paid"]), "value_median": med(si["value"]),
-                    "examples": [e for e, _ in si["examples"].most_common(3)]})
+                    "examples": [e for e, _ in si["examples"].most_common(3)],
+                    "subregions": [{"name": k, "bottles": b, "stock": si["sub_stock"][k],
+                                    "producers": [p for p, _ in si["sub_prod"][k].most_common(3)]}
+                                   for k, b in si["sub"].most_common(12)]})
 
     # bottles at peak per year with today's stock
     peak = {yr: 0 for yr in range(y, y + YEARS_AHEAD + 1)}
@@ -138,6 +148,7 @@ def _query(style, an):
         ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "normal_price_dkk": number or null,',
         ' "offer_ends": str or null, "drink_from_year": int, "drink_to_year": int, "peak_from_year": int,',
         ' "peak_to_year": int, "window_source": str, "why": str}]}',
+        'where "why" is 2-3 short bullet lines, each starting with "- " (why it fits the buyer, the peak, the deal).',
     ])
 
 
@@ -199,7 +210,7 @@ def clean_offers(offers, an, owned):
             "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc, "offer_ends": o.get("offer_ends"),
             "drink_from_year": _int(o.get("drink_from_year")), "drink_to_year": _int(o.get("drink_to_year")),
             "peak_from_year": pf, "peak_to_year": pt, "window_source": o.get("window_source") or "",
-            "why": o.get("why") or "", "fit": fit, "style": o.get("_style"),
+            "why": ai.bullets(o.get("why") or ""), "fit": fit, "style": o.get("_style"),
             "owned": owned.get(vocab.key(name)) or owned.get(vocab.key(f"{o.get('producer')}{vint}")),
         })
     out.sort(key=lambda r: (-(r["fit"] > 0), -r["fit"], -(r["discount_pct"] or 0)))

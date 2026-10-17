@@ -18,6 +18,35 @@ window.addEventListener("error", (e) => clientLog("error", e.message, { src: `${
 window.addEventListener("unhandledrejection", (e) => clientLog("rejection", e.reason?.message || e.reason, { stack: e.reason?.stack?.slice(0, 800) }));
 const today = () => new Date().toISOString().slice(0, 10);
 
+// 1.23: descriptive text as easy-to-read points. "- Label: text" lines become a list with bold labels;
+// old prose (no lines) is split into one point per sentence. An "Anecdote" point is shown last, in italics.
+const RICH_FIELDS = new Set(["info", "advice", "serving", "window_basis", "note", "reason"]);
+function points(t) {
+  t = String(t ?? "").trim();
+  if (!t) return [];
+  let lines = t.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+  if (!lines.some((l) => /^[-•*]\s/.test(l))) {
+    const parts = t.replace(/\s+/g, " ").split(/(?<=[.!?])\s+(?=[A-ZÆØÅÉ"“(0-9])/);
+    lines = [];
+    for (const x of parts) {   // keep "St. Julien", "Ch. Margaux" etc. together
+      if (lines.length && /\b(St|Ste|Ch|Dom|Mt|Dr|No|nr|ca|approx|vs|e\.g|i\.e)\.$/i.test(lines[lines.length - 1])) lines[lines.length - 1] += " " + x;
+      else lines.push(x);
+    }
+  }
+  return lines.map((l) => l.replace(/^[-•*]\s*/, "").replace(/\*\*/g, "")).filter(Boolean);
+}
+function rich(t) {
+  const pts = points(t);
+  if (!pts.length) return "";
+  if (pts.length === 1 && !/^[A-Z][\w ’'&/-]{1,24}:\s/.test(pts[0])) return `<p class="rich1">${esc(pts[0])}</p>`;
+  return `<ul class="rich">${pts.map((l) => {
+    const m = l.match(/^([A-Z][\w ’'&/-]{1,24}):\s+(.*)$/);
+    return m ? `<li class="${/^anecdote/i.test(m[1]) ? "anec" : ""}"><b>${esc(m[1])}:</b> ${esc(m[2])}</li>` : `<li>${esc(l)}</li>`;
+  }).join("")}</ul>`;
+}
+// help texts in the app: a short list instead of a paragraph
+const tips = (...xs) => `<ul class="tips">${xs.filter(Boolean).map((x) => `<li>${x}</li>`).join("")}</ul>`;
+
 const STATUS = {
   young: "Too young", ready: "Ready", peak: "At peak", now: "Drink soon", over: "Past window", unknown: "Unknown",
 };
@@ -65,7 +94,11 @@ async function refresh() {
 }
 
 // filters (1.20): kept in one object, edited in the filter sheet, shown as removable chips under the search field
-const F0 = { country: "", region: "", grape: "", basis: "value", pmin: "", pmax: "", vmin: "", vmax: "", types: [], status: "", all: false };
+const F0 = { country: "", region: "", grape: "", basis: "value", pmin: "", pmax: "", vmin: "", vmax: "", types: [], status: "", all: false, crit: "", smin: "" };
+const CRIT_SHORT = { rp: "WA", ws: "WS", js: "JS" };
+// a critic score as a number: "93" → 93, "91-93" → 92 (middle of a barrel score range)
+const scoreNum = (v) => { const n = String(v ?? "").match(/\d{2,3}(?:\.\d)?/g)?.map(Number).filter((x) => x >= 50 && x <= 100) || []; return n.length ? (n[0] + (n[1] ?? n[0])) / 2 : null; };
+const bestScore = (w, crit = "") => Math.max(-1, ...["rp", "ws", "js"].filter((k) => !crit || k === crit).map((k) => scoreNum(w[`${k}_score`]) ?? -1));
 let flt = { ...F0, ...load("filter", {}) };
 const priceOf = (w) => flt.basis === "paid" ? w.purchase_price : (w.list_price ?? w.purchase_price);
 const num = (v) => v === "" || v == null ? null : Number(v);
@@ -83,6 +116,7 @@ function matches(w, f = flt, terms = []) {
     const p = priceOf(w);
     if (p == null || (lo != null && p < lo) || (hi != null && p > hi)) return false;
   }
+  if (f.smin !== "" && bestScore(w, f.crit) < Number(f.smin)) return false;
   const vlo = num(f.vmin), vhi = num(f.vmax);
   if (vlo != null || vhi != null) {
     const v = Number(w.vintage);
@@ -112,6 +146,7 @@ function activeFilters() {
   if (flt.vmin !== "" || flt.vmax !== "") a.push([flt.vmin !== "" && flt.vmax !== "" ? (flt.vmin === flt.vmax ? flt.vmin : `${flt.vmin}–${flt.vmax}`) : flt.vmin !== "" ? `${flt.vmin} or later` : `${flt.vmax} or older`, () => { flt.vmin = flt.vmax = ""; }]);
   flt.types.forEach((t) => a.push([t[0].toUpperCase() + t.slice(1), () => { flt.types = flt.types.filter((x) => x !== t); }]));
   if (flt.status) a.push([STATUS[flt.status], () => { flt.status = ""; }]);
+  if (flt.smin !== "") a.push([Number(flt.smin) <= 1 ? `Has ${flt.crit ? CRIT_SHORT[flt.crit] + " " : "a "}score` : `${flt.crit ? CRIT_SHORT[flt.crit] : "Score"} ${flt.smin}+`, () => { flt.smin = ""; flt.crit = ""; }]);
   if (flt.all) a.push(["Incl. 0 bottles", () => { flt.all = false; }]);
   return a;
 }
@@ -120,19 +155,22 @@ function setFilter(patch) {
   if (!$("#fSheet").hidden) fillSheet();
   render();
 }
+function chipsHtml(a) {
+  return a.map(([l], i) => `<button type="button" class="chipv" data-rmf="${i}" title="Remove filter">${esc(l)}<span aria-hidden="true">×</span></button>`).join("")
+    + (a.length > 1 ? '<button type="button" class="linkbtn" data-rmf="all">Clear all</button>' : "");
+}
 function renderFilterChips() {
   const a = activeFilters();
   $("#fCount").hidden = !a.length; $("#fCount").textContent = a.length;
   $("#fBtn").classList.toggle("act", a.length > 0);
-  const box = $("#fChips"); box.hidden = !a.length;
-  box.innerHTML = a.map(([l], i) => `<button type="button" class="chipv" data-rmf="${i}" title="Remove filter">${esc(l)}<span aria-hidden="true">×</span></button>`).join("")
-    + (a.length > 1 ? '<button type="button" class="linkbtn" data-rmf="all">Clear all</button>' : "");
+  const box = $("#fChips"); box.hidden = !a.length; box.innerHTML = chipsHtml(a);
+  const sb = $("#fSheetChips"); sb.hidden = !a.length; sb.innerHTML = chipsHtml(a);
 }
-$("#fChips").addEventListener("click", (e) => {
+["#fChips", "#fSheetChips"].forEach((id) => $(id).addEventListener("click", (e) => {
   const b = e.target.closest("[data-rmf]"); if (!b) return;
   if (b.dataset.rmf === "all") { flt = { ...F0, basis: flt.basis }; setFilter({}); return; }
   activeFilters()[Number(b.dataset.rmf)]?.[1](); setFilter({});
-});
+}));
 
 // filter sheet: a bottom sheet on phones, a small dialog on wider screens; filters apply while you choose
 function fillSheet() {
@@ -151,10 +189,12 @@ function fillSheet() {
   $("#fType").innerHTML = types.map((t) => `<button type="button" data-t="${esc(t)}" class="${flt.types.includes(t) ? "on" : ""}">${esc(t)}</button>`).join("");
   $("#fStatus").innerHTML = ["peak", "now", "ready", "young", "over"].map((k) => `<button type="button" data-s="${k}" class="${flt.status === k ? "on" : ""}"><i class="dot s-${k}"></i>${STATUS[k]}</button>`).join("");
   $("#fAll").checked = flt.all;
+  $$("#fCrit button").forEach((b) => b.classList.toggle("on", b.dataset.c === flt.crit));
+  $$("#fSq button").forEach((b) => b.classList.toggle("on", b.dataset.s === String(flt.smin)));
   const n = wines.filter((w) => matches(w)).length;
   $("#fApply").textContent = `Show ${n} wine${n === 1 ? "" : "s"}`;
 }
-function openFilter() { fillSheet(); $("#fSheet").hidden = false; document.body.classList.add("noscroll"); }
+function openFilter() { fillSheet(); renderFilterChips(); $("#fSheet").hidden = false; document.body.classList.add("noscroll"); }
 function closeFilter() { $("#fSheet").hidden = true; document.body.classList.remove("noscroll"); }
 const filterOpen = () => !$("#fSheet").hidden;
 $("#fBtn").addEventListener("click", openFilter);
@@ -176,6 +216,8 @@ $("#fType").addEventListener("click", (e) => {
   const t = b.dataset.t;
   setFilter({ types: flt.types.includes(t) ? flt.types.filter((x) => x !== t) : [...flt.types, t] });
 });
+$("#fCrit").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ crit: b.dataset.c }); });
+$("#fSq").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ smin: String(flt.smin) === b.dataset.s ? "" : b.dataset.s }); });
 $("#fStatus").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ status: flt.status === b.dataset.s ? "" : b.dataset.s }); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && filterOpen()) closeFilter(); });
 
@@ -347,7 +389,7 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
           <div class="pslot" id="slot-front"></div>
           <div class="pslot" id="slot-back"></div>
         </div>
-        <p class="muted small">Take a photo of the front label; the lookup starts by itself. Add the back label (grapes, barcode) to improve it. Invoice text and barcode are optional${isNew ? "" : "; without photo or text, the current description is used"}. You choose which suggestions to apply.</p>
+        ${tips("Photo of the front label: the lookup starts by itself", "Back label (grapes, barcode) improves it", "Invoice text and barcode are optional", isNew ? "" : "Without photo or text, the current description is used", "You choose which suggestions to apply")}
         <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
         <div class="row">
           <input type="text" id="aiBarcode" placeholder="Barcode" value="${esc(w.barcode ?? "")}">
@@ -405,7 +447,7 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
             <span class="links"><a id="open-${c.k}" target="_blank" rel="noopener" hidden>Open</a><a id="srch-${c.k}" target="_blank" rel="noopener">Search</a></span>
             <input form="wf" type="url" name="${c.k}_url" value="${esc(w[`${c.k}_url`] ?? "")}" placeholder="Link to review" aria-label="${c.name} link"></div>`).join("")}
         </div>
-        <p class="muted small">AI scores are only filled in when a published score is known. <a id="srch-wsr" target="_blank" rel="noopener">Find on Wine-Searcher</a></p>
+        <p class="muted small">Scores are only filled in when a published score is known · <a id="srch-wsr" target="_blank" rel="noopener">Find on Wine-Searcher</a></p>
 
         <div class="foot">
           <button class="btn primary" id="saveW">${isNew ? "Create wine" : "Save changes"}</button>
@@ -456,16 +498,21 @@ function renderOverview() {
       : `<span class="score" title="${esc(c.name)}">${c.k.toUpperCase()} ${esc(w[`${c.k}_score`])}</span>`;
   }).join("");
   const size = w.size_cl && Number(w.size_cl) !== 75 ? ` · ${w.size_cl} cl` : "";
-  const txt = (l, v) => (v ? `<p><b>${l}</b> ${esc(v)}</p>` : "");
+  const txt = (l, v) => (v ? `<section><h4>${l}</h4>${rich(v)}</section>` : "");
+  const critStrip = CRITICS.some((c) => w[`${c.k}_score`]) ? `<div class="crits">${CRITICS.filter((c) => w[`${c.k}_score`]).map((c) => {
+      const u = w[`${c.k}_url`], inner = `<b>${esc(w[`${c.k}_score`])}</b><span>${esc(c.name.replace("Robert Parker · ", ""))}</span>`;
+      return /^https?:/.test(u || "") ? `<a class="crit" href="${esc(u)}" target="_blank" rel="noopener" title="Open the review">${inner}</a>` : `<div class="crit">${inner}</div>`;
+    }).join("")}</div>`
+    : `<p class="small muted nocrit">No critic scores yet · <a href="https://www.wine-searcher.com/find/${encodeURIComponent(searchName(w).replace(/\s+/g, "+"))}" target="_blank" rel="noopener">find on Wine-Searcher</a></p>`;
   el.innerHTML = `${winCell(w).replace('class="win', 'class="win big')}
+    ${critStrip}
     <dl class="facts">
       ${fact("Vintage", w.vintage ?? "")}${fact("Type", esc(w.wine_type || "") + size)}
       ${fact("Grapes", esc(w.grapes || ""))}${fact("Price", price)}
       ${fact("Shop", esc(w.shop || ""))}${fact("Location", esc(w.location || ""))}
-      ${scores ? fact("Scores", scores) : ""}
       ${w.link ? fact("Link", `<a href="${esc(w.link)}" target="_blank" rel="noopener">${esc(new URL(w.link, location.href).hostname.replace(/^www\./, ""))}</a>`) : ""}
     </dl>
-    ${w.info || w.advice || w.serving || w.window_basis || w.note ? `<div class="ovtext">${txt("About:", w.info)}${txt("Drinking:", w.advice)}${txt("Serving:", w.serving)}${txt("Window:", w.window_basis)}${txt("Notes:", w.note)}</div>` : ""}`;
+    ${w.info || w.advice || w.serving || w.window_basis || w.note ? `<div class="ovtext">${txt("About", w.info)}${txt("Drinking", w.advice)}${txt("Serving", w.serving)}${txt("Drinking window based on", w.window_basis)}${txt("Notes", w.note)}</div>` : ""}`;
 }
 
 function updateDirty() {
@@ -701,7 +748,7 @@ function renderSuggestions(r) {
     ${rows.map(([k, l]) => {
       const u = unsure.has(k);
       const vy = Number(r.suggestion.vintage || f.vintage), yy = (v) => (k.endsWith("_age") && vy && v !== "" && v != null ? ` (${vy + Number(v)})` : "");
-      return `<tr class="${u ? "unsure" : ""}" data-row="${k}"><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${esc(cur(k))}${yy(cur(k))}</td><td>${esc(r.suggestion[k])}${yy(r.suggestion[k])}</td>
+      return `<tr class="${u ? "unsure" : ""}" data-row="${k}"><td>${u ? "⚠ " : ""}${l}</td><td class="muted">${RICH_FIELDS.has(k) ? rich(cur(k)) : esc(cur(k)) + yy(cur(k))}</td><td>${RICH_FIELDS.has(k) ? rich(r.suggestion[k]) : esc(r.suggestion[k]) + yy(r.suggestion[k])}</td>
         <td class="acts2"><button type="button" class="okb" data-acc1="${k}" title="Accept">✓</button><button type="button" class="nob" data-rej1="${k}" title="Reject">✕</button></td></tr>`;
     }).join("")}
     </tbody></table>`;
@@ -1048,7 +1095,7 @@ async function renderStats() {
       <div class="kpi"><div class="v ${s.past_peak ? "s-now" : ""}">${s.past_peak}</div><div class="l">bottles past their peak</div></div>
       <div class="kpi"><div class="v">${kr(s.value)}</div><div class="l">value · ${kr(s.cost)} paid</div></div>
     </div>
-    ${s.peak_estimated ? `<p class="muted small">${s.peak_estimated} of ${s.bottles} bottles use an estimated peak (30–80 % into the drinking window) until a real peak is set.</p>` : ""}
+    ${s.peak_estimated ? tips(`${s.peak_estimated} of ${s.bottles} bottles use an estimated peak`, "Estimated peak = 30–80 % into the drinking window, until a real peak is set") : ""}
     <div class="sgrid">
       <div class="panel"><h2>Bottles at peak, by year</h2><p class="muted small">How many of today's bottles are in their peak each year.</p>
         ${bars(Object.fromEntries(py), { sortKey: ([a], [b]) => a.localeCompare(b), cls: () => "st-peak" })}</div>
@@ -1121,11 +1168,16 @@ async function renderRecs() {
       : last.errors?.length ? "" : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}
     <div class="sgrid recs-top">
       <details class="panel fold"><summary><h2>Peak gaps</h2><span class="small muted">${an.gaps.length ? `Gaps: ${esc(gapTxt)}` : "No gaps"}</span></summary>
-        <p class="small muted">You drink about <b>${an.per_year}</b> bottles a year. Years where fewer of today's bottles are at peak than that are marked as gaps.</p>
+        ${tips(`You drink about <b>${an.per_year}</b> bottles a year`, "Gap = a year where fewer of today's bottles are at peak than that")}
         <div class="hbars target" style="--target:${(an.per_year / maxN) * 100}%">${peakRows}</div></details>
       <details class="panel fold"><summary><h2>What you buy most</h2><span class="small muted">${top ? `${esc(top.type)} · ${esc(top.area)}${an.styles.length > 1 ? ` +${an.styles.length - 1}` : ""}` : ""}</span></summary>
-        <ul class="styles">${an.styles.map((x) => `<li><b>${esc(x.type)} · ${esc(x.area)}</b> <span class="muted">${x.area !== x.country ? esc(x.country) + " · " : ""}${x.bottles} bottles</span>
-          <div class="small muted">${[esc(x.producers.slice(0, 3).join(", ")), x.paid_median ? `usually paid ${kr(x.paid_median)}${x.value_median ? `, value ${kr(x.value_median)}` : ""}` : ""].filter(Boolean).join(" · ")}</div></li>`).join("")}</ul></details>
+        <ul class="styles">${an.styles.map((x) => { const subs = (x.subregions || []).filter((r) => r.name !== "(no sub-region)" || x.subregions.length > 1);
+          return `<li><details class="sty"><summary><span><b>${esc(x.type)} · ${esc(x.area)}</b> <span class="muted">${x.area !== x.country ? esc(x.country) + " · " : ""}${x.bottles} bottles</span></span></summary>
+          ${tips(x.producers.length ? `Producers: ${esc(x.producers.slice(0, 3).join(", "))}` : "", x.paid_median ? `Usually paid ${kr(x.paid_median)}${x.value_median ? ` for a value of ${kr(x.value_median)}` : ""}` : "",
+            x.grapes?.length ? `Grapes: ${esc(x.grapes.join(", "))}` : "")}
+          ${subs.length ? `<table class="subreg"><thead><tr><th>Region</th><th class="num">Bought</th><th class="num">In stock</th></tr></thead><tbody>
+            ${subs.map((r) => `<tr><td>${esc(r.name)}${r.producers.length ? `<div class="sub">${esc(r.producers.join(", "))}</div>` : ""}</td><td class="num">${r.bottles}</td><td class="num">${r.stock}</td></tr>`).join("")}</tbody></table>` : ""}
+          </details></li>`; }).join("")}</ul></details>
     </div>`;
   if (!run && recsOffers.some((o) => !o.checked) && !renderRecs.checking) {   // results from before 1.22: check their links once
     renderRecs.checking = true;
@@ -1180,7 +1232,7 @@ function offerCard(o, i) {
     <div class="otags">${peak ? `<span class="chip s-peak">Peak ${peak}</span>` : ""}${o.fit ? '<span class="chip s-ready">Fills a gap</span>' : ""}
       ${m.same.some((w) => w.stock > 0) ? '<span class="chip s-now">In cellar</span>' : m.other.length ? '<span class="chip s-young">Other vintage in cellar</span>' : ""}${o.style ? `<span class="tag">${esc(o.style)}</span>` : ""}</div>
     ${ownedNote(m)}
-    ${o.why ? `<p class="small">${esc(o.why)}</p>` : ""}
+    ${o.why ? `<div class="small">${rich(o.why)}</div>` : ""}
     <p class="small muted">${o.drink_from_year ? `Drink ${o.drink_from_year}–${o.drink_to_year}` : ""}${o.window_source ? ` · ${esc(o.window_source)}` : ""}${o.offer_ends ? ` · offer ends ${esc(o.offer_ends)}` : ""}</p>
     ${o.price_note ? `<p class="small warn">Price now: ${esc(o.price_note)}</p>` : ""}
     ${o.checked ? (o.link_ok ? `<p class="small linkok">✓ Product page found at ${esc(o.shop)}</p>`
@@ -1229,31 +1281,32 @@ async function renderReview() {
   el.innerHTML = `
     <div class="panel wide">
       <h2>Review suggested changes</h2>
-      <p>${pend.length ? `${pend.length} suggestions change values you already have. You can adjust a value before you accept it.` : "Nothing to review."}</p>
-      ${pend.length ? '<p class="small muted">Use ✓ / ✕ to take or leave single values, or the buttons below a wine for all its values.</p>' : ""}
+      ${pend.length ? tips(`<b>${pend.length}</b> suggestions change values you already have`, "Adjust a value before you accept it if you like",
+        "✓ / ✕ takes or leaves one value; the buttons below a wine take or leave all its values") : "<p>Nothing to review.</p>"}
       ${pend.length > 1 ? '<div class="row"><button class="btn" id="accAll">Accept every suggestion</button></div>' : ""}
     </div>
     <div class="panel wide" id="bulkPanel">
       <h3 class="sm">✨ AI review of the cellar</h3>
-      <p class="small muted">Looks up every wine in stock without its own peak (AI + web search, about a minute per wine) and
-        adds drinking window and peak suggestions here. Empty critic scores are filled in directly. It runs in Home Assistant,
-        so you can close the app meanwhile.</p>
+      ${tips("<b>Drinking windows:</b> every wine in stock without its own peak, about a minute per wine (AI + web search); suggestions appear here, empty critic scores are filled in directly",
+        "<b>About texts:</b> writes area, estate, producer and an anecdote (if there is a true one) for every wine in stock that does not have it yet; saved right away, the old text is kept in the list below",
+        "Runs in Home Assistant, so you can close the app meanwhile")}
       <div id="bulkStatus" class="small"></div>
     </div>
     ${pend.map((p) => `<div class="panel wide prop" data-pid="${p.id}">
       <div class="phead"><a href="#" data-openw="${p.wine_id}" class="wname">${esc(p.description)}</a><span class="tag">${esc(p.topic || "")}</span></div>
       <table class="sugg"><thead><tr><th>Field</th><th>Now</th><th>Suggested</th><th></th></tr></thead><tbody>
-      ${Object.entries(p.changes).map(([k, v]) => `<tr data-fk="${k}"><td>${FLABEL[k] || k}</td><td class="muted">${esc(p.old[k] ?? "")}${yrsNote(p, k, p.old[k])}</td>
-        <td><input type="text" data-k="${k}" value="${esc(v ?? "")}">${yrsNote(p, k, v)}</td>
+      ${Object.entries(p.changes).map(([k, v]) => `<tr data-fk="${k}"><td>${FLABEL[k] || k}</td><td class="muted">${RICH_FIELDS.has(k) ? rich(p.old[k]) : esc(p.old[k] ?? "")}${yrsNote(p, k, p.old[k])}</td>
+        <td>${RICH_FIELDS.has(k) ? `<textarea data-k="${k}" rows="5">${esc(v ?? "")}</textarea>` : `<input type="text" data-k="${k}" value="${esc(v ?? "")}">`}${yrsNote(p, k, v)}</td>
         <td class="acts2"><button class="okb" data-f1="${p.id}" data-fk1="${k}" data-ok="1" title="Accept this value">✓</button><button class="nob" data-f1="${p.id}" data-fk1="${k}" title="Reject this value">✕</button></td></tr>`).join("")}
       </tbody></table>
-      ${p.reason ? `<p class="small">${esc(p.reason)}</p>` : ""}
+      ${p.reason ? `<div class="small">${rich(p.reason)}</div>` : ""}
       ${p.sources.length ? `<p class="small muted">Sources: ${p.sources.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">${i + 1}</a>`).join(" · ")}</p>` : ""}
       <div class="row"><button class="btn primary" data-acc="${p.id}">Accept all</button><button class="btn" data-rej="${p.id}">Reject all</button></div>
     </div>`).join("")}
-    ${applied.length ? `<div class="panel wide"><details><summary><b>${applied.length} empty fields were filled in automatically</b></summary>
+    ${applied.length ? `<div class="panel wide"><details><summary><b>${applied.length} changes were saved automatically</b></summary>
       <ul class="clean">${applied.map((p) => `<li><a href="#" data-openw="${p.wine_id}">${esc(p.description)}</a>:
-        ${Object.entries(p.changes).filter(([k]) => !k.endsWith("_url")).map(([k, v]) => `${FLABEL[k] || k} ${esc(v)}`).join(", ")}
+        ${Object.entries(p.changes).filter(([k]) => !k.endsWith("_url")).map(([k, v]) => `${FLABEL[k] || k} ${esc(String(v).replace(/\s+/g, " ").slice(0, 70))}${String(v).length > 70 ? "…" : ""}`).join(", ")}
+        ${p.old?.info ? `<details class="small"><summary class="muted">Earlier text</summary>${rich(p.old.info)}</details>` : ""}
         ${p.sources.length ? `<a href="${esc(p.sources[0])}" target="_blank" rel="noopener">source</a>` : ""}</li>`).join("")}</ul></details></div>` : ""}`;
   updateReviewCount();
   bulkSeen = null;
@@ -1266,15 +1319,16 @@ async function renderBulk() {
   let st;
   try { st = await api("api/ai/bulk"); } catch (e) { el.textContent = "AI review status unavailable: " + e.message; return; }
   const run = st.status === "running";
-  const head = run ? `<b>Running:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
+  const what = st.mode === "about" ? "About texts" : "Drinking windows";
+  const head = run ? `<b>${what}, running:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
       (st.errors ? ` · ${st.errors} errors` : "") + (st.current ? `<br><span class="muted">Now: ${esc(st.current)}</span>` : "")
     : st.status === "idle" ? ""
-    : `<b>${st.status === "done" ? "Finished" : st.status === "cancelled" ? "Cancelled" : st.status === "paused" ? "Paused" : "Stopped"}:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} with suggestions` +
+    : `<b>${what}, ${st.status === "done" ? "finished" : st.status === "cancelled" ? "cancelled" : st.status === "paused" ? "paused" : "stopped"}:</b> ${st.done ?? 0} of ${st.total ?? "?"} wines checked · ${st.suggested ?? 0} ${st.mode === "about" ? "written" : "with suggestions"}` +
       (st.errors ? ` · ${st.errors} errors` : "") + (st.error ? ` · ${esc(st.error)}` : "");
   if (bulkSeen == null) bulkSeen = st.suggested ?? 0;
   const newer = (st.suggested ?? 0) > bulkSeen;
   el.innerHTML = `${head ? `<p>${head}</p>` : ""}
-    <div class="row">${run ? '<button class="btn" id="bulkCancel">Stop</button>' : '<button class="btn primary" id="bulkStart">Start AI review</button>'}
+    <div class="row">${run ? '<button class="btn" id="bulkCancel">Stop</button>' : '<button class="btn primary" id="bulkStart">Review drinking windows</button><button class="btn" id="bulkAbout">Write About texts</button>'}
       ${newer ? '<button class="btn" id="bulkShow">Show new suggestions</button>' : ""}</div>
     ${st.log && st.log.length ? `<details><summary class="muted">Log</summary><pre class="small">${esc(st.log.join("\n"))}</pre></details>` : ""}`;
   updateReviewCount();
@@ -1288,12 +1342,12 @@ $("#tab-review").addEventListener("click", async (e) => {
   const decide = async (id, accept) => {
     const card = $(`.prop[data-pid="${id}"]`);
     const changes = {};
-    $$("input[data-k]", card).forEach((i) => { changes[i.dataset.k] = i.value === "" ? null : (/^-?\d+$/.test(i.value) && i.dataset.k.endsWith("_age") ? Number(i.value) : i.value); });
+    $$("[data-k]", card).forEach((i) => { changes[i.dataset.k] = i.value === "" ? null : (/^-?\d+$/.test(i.value) && i.dataset.k.endsWith("_age") ? Number(i.value) : i.value); });
     await send(`api/proposals/${id}/${accept ? "accept" : "reject"}`, "POST", { changes });
   };
   if (b.dataset.f1) {  // one value
     const card = $(`.prop[data-pid="${b.dataset.f1}"]`), k = b.dataset.fk1;
-    const inp = $(`input[data-k="${k}"]`, card);
+    const inp = $(`[data-k="${k}"]`, card);
     let value = inp.value === "" ? null : inp.value;
     if (value != null && k.endsWith("_age") && /^-?\d+$/.test(value)) value = Number(value);
     try {
@@ -1312,6 +1366,10 @@ $("#tab-review").addEventListener("click", async (e) => {
       if (!confirm("Look up all wines in stock without a peak? It takes about a minute per wine.")) return;
       await send("api/ai/bulk", "POST", { only_missing: true }); bulkSeen = 0; renderBulk(); return;
     }
+    else if (b.id === "bulkAbout") {
+      if (!confirm("Write a new About text (area, estate, producer, anecdote) for every wine in stock that does not have one in this format? Existing texts are replaced; the old text is kept in the Review list.")) return;
+      await send("api/ai/bulk", "POST", { mode: "about" }); bulkSeen = 0; renderBulk(); return;
+    }
     else if (b.id === "bulkCancel") { await send("api/ai/bulk/cancel", "POST", {}); setTimeout(renderBulk, 1500); return; }
     else if (b.id === "bulkShow") { renderReview(); return; }
     else if (b.id === "accAll") { if (!confirm("Accept all suggestions?")) return; for (const c of $$(".prop")) await decide(c.dataset.pid, true); }
@@ -1329,9 +1387,9 @@ async function renderCleanup() {
     ${sugg.length ? `<ul class="clean">${sugg.flatMap((g) => g.from.map((f) => `<li>
         <span class="tag">${FIELD_LABEL[g.field]}</span> <b>${esc(f.value)}</b> <span class="muted">(${f.count})</span> → <b>${esc(g.to)}</b> <span class="muted">(${g.to_count})</span>
         <button class="btn" data-merge='${esc(JSON.stringify({ field: g.field, from: f.value, to: g.to }))}'>Merge</button></li>`)).join("")}</ul>`
-      : '<p class="muted small">No obvious duplicates. Spelling variants that only differ in case, accents, spaces or hyphens are merged automatically.</p>'}
+      : `<p class="muted small">No obvious duplicates.</p>${tips("Variants that only differ in case, accents, spaces or hyphens are merged automatically")}`}
     <h3 class="sm">All values</h3>
-    <p class="muted small">Rename a value, or type an existing value to merge into it. The old spelling is remembered and corrected automatically, also on Excel import.</p>
+    ${tips("Rename a value, or type an existing value to merge into it", "The old spelling is remembered and corrected automatically, also on Excel import")}
     ${Object.entries(voc).map(([f, vals]) => `<details><summary>${FIELD_LABEL[f]} <span class="muted">(${vals.length})</span></summary>
       <datalist id="dlc-${f}">${options(vals.map((x) => x.value))}</datalist>
       <ul class="clean">${vals.map((x) => `<li><input type="text" value="${esc(x.value)}" list="dlc-${f}" data-orig="${esc(x.value)}" data-field="${f}">

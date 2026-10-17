@@ -1,3 +1,13 @@
+# 1.23.0
+- **Easier to read texts**: About, drinking advice, serving and "window based on" are shown as short points with bold labels instead of a block of prose. Older texts are split into one point per sentence. Help texts in the app are short lists too.
+- **About the wine** now has points for the **area**, the **estate** (château/domaine) and the **producer**, with a true **anecdote** last when there is one. New lookups write it this way.
+- Review tab: **Write About texts** writes the new About text for every wine in stock that does not have it yet (AI only, no web search). Texts are saved right away; the earlier text is kept in the Review list.
+- **Critic scores** are shown as large tiles at the top of a wine (tap one to open the review), or a Wine-Searcher link when there are none.
+- Filter: **critic score** (any critic, Wine Advocate, Wine Spectator or James Suckling; has a score, 90+, 92+, 94+, 96+). A range like 94-96 counts as 95.
+- Filter: the active filters are shown at the top of the filter panel too, each with × to remove it, and "Clear all".
+- Offers, "What you buy most": up to 8 styles, each unfolds to show producers, price level, grapes and a table of its sub-regions (bottles bought and in stock).
+- Fixed: the "Show wines with 0 bottles" checkbox in the filter panel.
+
 # 1.22.0
 - **Swipe back / back button** now works inside the app: it closes the open wine, filter, camera or dialog, or goes back to the previous tab, instead of leaving Wine Cellar. Unsaved changes still ask before the wine closes.
 - Offers: every shop link is checked by the app. It opens the page and confirms it is the product page for that wine and vintage; if the link points to a category, a search page or another wine, the app looks for the right product on that page or with the shop's own search. Confirmed offers show "✓ Product page found" and come first. When the wine cannot be found on the shop's site the card says so and the button becomes a search on that shop instead of a wrong link. If the shop's page shows another price, it is shown.
