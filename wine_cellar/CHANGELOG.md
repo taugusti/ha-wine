@@ -1,3 +1,9 @@
+# 1.24.0
+- Offers: the price is the offer price per bottle on the offer's terms, with "buying 6" when you must buy several to get it.
+- The struck-through "before" price says what it is: an earlier price, the price for 1 bottle, the list price (RRP) or the price at other shops.
+- **Is it a real deal?** The search also looks up the lowest price for the same wine and vintage at other Danish shops. Each offer shows "Other shops: 249 DKK (Vinbanden), 36% cheaper here" and a label: **Real deal** (at least 15% below other shops), **Normal price**, **Dearer than other shops**, or **Discount not checked** when no other shop has it. The shop's own discount is struck through when it is not a real saving. Real deals are listed first.
+- The price on the shop's page no longer replaces the offer price (a multi-buy offer shows the single-bottle price there); a different page price is just noted.
+
 # 1.23.4
 - Offers: the points about each wine are facts about the wine (style, grapes, vintage, ageing potential, critic praise), not about you, your cellar or the price; price, discount and peak are shown separately.
 - Fixed: the points were shown as one text in brackets when the agent returned them as a list.

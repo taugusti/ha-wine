@@ -247,13 +247,11 @@ def check_all(offers, workers=4):
             o.update(check(o))
         except Exception:  # noqa: BLE001
             o.update(checked=True, link_ok=False, url=site_search(o, None), agent_url=o.get("url"))
-        pp, price = o.get("page_price"), o.get("price_dkk")
-        if pp and price and abs(pp - price) / price > 0.03:
-            o["price_note"] = f"{pp} DKK on the shop's page"
-            if pp > price:   # the offer price from the search is not the price now; recompute the discount
-                o["price_dkk"] = pp
-                n = o.get("normal_price_dkk")
-                o["discount_pct"] = round((1 - pp / n) * 100) if n and n > pp else None
+        pp, price, before = o.get("page_price"), o.get("price_dkk"), o.get("normal_price_dkk")
+        near = lambda a, b: a and b and abs(a - b) / b <= 0.03  # noqa: E731
+        if pp and price and not near(pp, price) and not near(pp, before):
+            # a multi-buy offer often shows the single-bottle price on the page; just show it, do not change the offer
+            o["price_note"] = f"The shop's page shows {pp} DKK"
         return o
     with ThreadPoolExecutor(workers) as ex:
         return list(ex.map(one, offers))

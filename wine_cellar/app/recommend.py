@@ -140,7 +140,13 @@ def _query(style, an):
         "peak (optimal drinking period) falls in those years, based on published drinking windows or the producer's",
         "and vintage's known ageing potential. Similar wines from neighbouring regions are fine if they fit better.",
         "Only vintage wines (no non-vintage or multi-vintage blends): a peak in a given year needs a vintage.",
-        "price_dkk and normal_price_dkk are for ONE 75 cl bottle; if the shop's price is for a case, divide it.",
+        "Prices, all in DKK per ONE 75 cl bottle (divide a case price by the number of bottles):",
+        "- price_dkk: the offer price per bottle on the offer's terms (e.g. the per-bottle price when you buy 6).",
+        "- offer_qty: how many bottles you must buy to get price_dkk (1 if any quantity).",
+        "- before_price_dkk: the 'before'/'normal' price the shop shows next to the offer, or null.",
+        "- before_basis: what that before price is: 'earlier price', 'single bottle', 'RRP', 'other shops' or 'unknown'.",
+        "- market_price_dkk: the lowest current price for the SAME wine and vintage at OTHER Danish shops (search for",
+        "  it; per bottle, single-bottle price), or null if no other shop has it. market_shop: that shop's name.",
         "offer_ends is the end date as YYYY-MM-DD, or null if the page shows no date.",
         "",
         "Give 4 to 6 different wines. Only offers you actually found on a shop page in your search results.",
@@ -149,7 +155,8 @@ def _query(style, an):
         "exact product URL, leave the wine out. Use the wine name and vintage exactly as the shop writes them.",
         "Return ONLY this JSON, no other text:",
         '{"offers": [{"wine": str, "producer": str, "vintage": int, "country": str, "region": str, "grapes": str,',
-        ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "normal_price_dkk": number or null,',
+        ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "offer_qty": int,',
+        ' "before_price_dkk": number or null, "before_basis": str, "market_price_dkk": number or null, "market_shop": str,',
         ' "offer_ends": str or null, "drink_from_year": int, "drink_to_year": int, "peak_from_year": int,',
         ' "peak_to_year": int, "window_source": str, "why": str}]}',
         '"why" is a JSON string (not a list) of 2-3 short factual points about the wine itself, each line starting',
@@ -199,6 +206,13 @@ def _text(v):
     return str(v or "")
 
 
+def _verdict(real):
+    """Is it a real deal? Judged against the price at other shops, not the shop's own 'before' price."""
+    if real is None:
+        return "unchecked"
+    return "good" if real >= 15 else "normal" if real >= -5 else "dear"
+
+
 def _date(v):
     m = re.search(r"\d{4}-\d{2}-\d{2}", str(v or ""))
     return m.group(0) if m else None
@@ -241,14 +255,19 @@ def clean_offers(offers, an, owned):
         if not name or k in seen:
             continue
         seen.add(k)
-        normal = _num(o.get("normal_price_dkk"))
+        normal = _num(o.get("before_price_dkk") or o.get("normal_price_dkk"))
         disc = round((1 - price / normal) * 100) if normal and normal > price else None
+        market = _num(o.get("market_price_dkk"))
+        real = round((1 - price / market) * 100) if market else None   # saving against other shops; negative = dearer
         fit = sum(short.get(yr, 0) for yr in range(pf, pt + 1)) if pf and pt else 0
         out.append({
             "wine": name, "producer": o.get("producer") or "", "vintage": vint, "country": o.get("country") or "",
             "region": o.get("region") or "", "grapes": o.get("grapes") or "", "wine_type": (o.get("wine_type") or "red").lower(),
             "shop": o.get("shop") or urllib.parse.urlparse(url).hostname, "url": url, "price_dkk": round(price),
-            "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc, "offer_ends": _date(o.get("offer_ends")),
+            "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc,
+            "offer_qty": max(1, _int(o.get("offer_qty")) or 1), "before_basis": str(o.get("before_basis") or "unknown"),
+            "market_price_dkk": round(market) if market else None, "market_shop": o.get("market_shop") or "",
+            "real_pct": real, "verdict": _verdict(real), "offer_ends": _date(o.get("offer_ends")),
             "drink_from_year": _int(o.get("drink_from_year")), "drink_to_year": _int(o.get("drink_to_year")),
             "peak_from_year": pf, "peak_to_year": pt, "window_source": o.get("window_source") or "",
             "why": ai.bullets(_text(o.get("why"))), "fit": fit, "style": o.get("_style"),
@@ -319,7 +338,9 @@ def run(enrich):
 
 def sort_offers(offers):
     """Confirmed shop pages first, then best gap fit, then biggest discount."""
-    return sorted(offers, key=lambda r: (not r.get("link_ok"), -(r["fit"] > 0), -r["fit"], -(r.get("discount_pct") or 0)))
+    rank = {"good": 0, "unchecked": 1, "normal": 2, "dear": 3}
+    return sorted(offers, key=lambda r: (not r.get("link_ok"), -(r["fit"] > 0), rank.get(r.get("verdict"), 1), -r["fit"],
+                                         -(r.get("real_pct") if r.get("real_pct") is not None else r.get("discount_pct") or 0)))
 
 
 def _recheck():

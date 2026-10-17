@@ -512,3 +512,11 @@ a.crit:hover { outline: 1px solid var(--accent); }
 .fbody > label.chk input { width: 20px; height: 20px; margin: 0; }
 ul.rich.opts { font-size: 14px; margin: 2px 0; }
 ul.rich.opts li.warn, ul.rich.opts li.linkok { font-size: 13px; }
+/* 1.24: offer price and deal check */
+.oprice .per { font-size: 12px; color: var(--muted); }
+.oprice .before { font-size: 12px; color: var(--muted); }
+.oprice .before s { font-size: 13px; }
+.chip.deal { margin-left: 0; color: var(--muted); }
+.chip.deal.good { color: var(--ready); }
+.chip.deal.dear { color: var(--over); }
+.oprice .disc.fake { color: var(--muted); text-decoration: line-through; }

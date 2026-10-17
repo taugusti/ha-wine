@@ -1231,22 +1231,34 @@ function ownedNote(m) {
   return `<div class="owned">${parts.join("")}</div>`;
 }
 
+const BEFORE = { "earlier price": "earlier price", "single bottle": "for 1 bottle", RRP: "list price (RRP)", "other shops": "at other shops", unknown: "before" };
+function dealChip(o) {
+  if (!o.verdict) return "";
+  return { good: `<span class="chip deal good">Real deal${o.real_pct ? ` −${o.real_pct}%` : ""}</span>`,
+    normal: '<span class="chip deal">Normal price</span>', dear: '<span class="chip deal dear">Dearer than other shops</span>',
+    unchecked: '<span class="chip deal unk">Discount not checked</span>' }[o.verdict] || "";
+}
 function offerCard(o, i) {
   const m = cellarMatch(o), mine = m.same[0];
   const peak = o.peak_from_year ? (o.peak_from_year === o.peak_to_year ? o.peak_from_year : `${o.peak_from_year}–${o.peak_to_year}`) : null;
   return `<div class="panel offer ${o.checked && !o.link_ok ? "unconfirmed" : ""}">
     <div class="ohead"><div><div class="wname">${esc(o.wine)}${o.vintage && !String(o.wine).includes(o.vintage) ? " " + o.vintage : ""}</div>
       <div class="sub">${esc([o.producer, o.region, o.country].filter(Boolean).join(" · "))}</div></div>
-      <div class="oprice"><b>${kr(o.price_dkk)}</b>${o.normal_price_dkk ? `<s>${kr(o.normal_price_dkk)}</s>` : ""}${o.discount_pct ? `<span class="disc">−${o.discount_pct}%</span>` : ""}</div></div>
-    <div class="otags">${peak ? `<span class="chip s-peak">Peak ${peak}</span>` : ""}${o.fit ? '<span class="chip s-ready">Fills a gap</span>' : ""}
+      <div class="oprice"><b>${kr(o.price_dkk)}</b><span class="per">per bottle${o.offer_qty > 1 ? `, buying ${o.offer_qty}` : ""}</span>
+        ${o.normal_price_dkk ? `<span class="before"><s>${kr(o.normal_price_dkk)}</s> ${esc(BEFORE[o.before_basis] || "before")}</span>` : ""}
+        ${o.discount_pct ? `<span class="disc ${o.verdict === "normal" || o.verdict === "dear" ? "fake" : ""}" title="The shop's own discount">−${o.discount_pct}%</span>` : ""}</div></div>
+    <div class="otags">${dealChip(o)}${peak ? `<span class="chip s-peak">Peak ${peak}</span>` : ""}${o.fit ? '<span class="chip s-ready">Fills a gap</span>' : ""}
       ${m.same.some((w) => w.stock > 0) ? '<span class="chip s-now">In cellar</span>' : m.other.length ? '<span class="chip s-young">Other vintage in cellar</span>' : ""}${o.style ? `<span class="tag">${esc(o.style)}</span>` : ""}</div>
     ${ownedNote(m)}
     <ul class="rich opts">
       ${points(o.why).map((x) => `<li>${esc(x)}</li>`).join("")}
+      ${!o.verdict ? "" : `<li class="${o.verdict === "good" ? "linkok" : o.verdict === "dear" ? "warn" : ""}"><b>Other shops:</b> ${o.market_price_dkk
+        ? `${kr(o.market_price_dkk)}${o.market_shop ? ` (${esc(o.market_shop)})` : ""}, ${o.real_pct > 0 ? `${o.real_pct}% cheaper here` : o.real_pct < 0 ? `${-o.real_pct}% dearer here` : "same price"}`
+        : "no price found, so the discount is the shop's own claim"}</li>`}
       ${o.drink_from_year ? `<li><b>Drink:</b> ${o.drink_from_year}–${o.drink_to_year}${peak ? `, peak ${peak}` : ""}</li>` : ""}
       ${points(o.window_source).map((x, j) => `<li>${j ? "" : "<b>Window from:</b> "}${esc(x)}</li>`).join("")}
       ${/^\d{4}-\d{2}-\d{2}/.test(o.offer_ends || "") ? `<li><b>Offer ends:</b> ${esc(o.offer_ends)}</li>` : ""}
-      ${o.price_note ? `<li class="warn"><b>Price now:</b> ${esc(o.price_note)}</li>` : ""}
+      ${o.price_note ? `<li class="muted">${esc(o.price_note)}</li>` : ""}
       ${o.checked ? (o.link_ok ? `<li class="linkok">✓ Product page found at ${esc(o.shop)}</li>`
         : `<li class="warn">Not found on ${esc(o.shop)}'s site: the offer may be gone or wrong. The button searches the shop.</li>`) : ""}
     </ul>
@@ -1265,7 +1277,7 @@ $("#tab-recs").addEventListener("click", async (e) => {
       const age = (yr) => (yr && v ? yr - v : "");
       openWine(null, { description: `${o.wine}${v && !String(o.wine).includes(v) ? " " + v : ""}`, producer: o.producer, vintage: v || "",
         country: o.country, region: o.region, grapes: o.grapes, wine_type: o.wine_type || "red", shop: o.shop, link: o.url,
-        purchase_price: o.price_dkk, list_price: o.normal_price_dkk || o.price_dkk,
+        purchase_price: o.price_dkk, list_price: o.market_price_dkk || o.normal_price_dkk || o.price_dkk,
         drink_from_age: age(o.drink_from_year), drink_to_age: age(o.drink_to_year), peak_from_age: age(o.peak_from_year), peak_to_age: age(o.peak_to_year),
         window_basis: o.window_source || "" });
     }
