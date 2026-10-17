@@ -7,6 +7,7 @@ where few bottles will be at their peak.
    Runs in a background thread; the last result is kept in the meta table.
 """
 import json
+import re
 import statistics
 import threading
 import time
@@ -138,6 +139,9 @@ def _query(style, an):
         f"The cellar lacks wines that are at their PEAK in {_gap_text(an['gaps'], y)}. Choose wines and vintages whose",
         "peak (optimal drinking period) falls in those years, based on published drinking windows or the producer's",
         "and vintage's known ageing potential. Similar wines from neighbouring regions are fine if they fit better.",
+        "Only vintage wines (no non-vintage or multi-vintage blends): a peak in a given year needs a vintage.",
+        "price_dkk and normal_price_dkk are for ONE 75 cl bottle; if the shop's price is for a case, divide it.",
+        "offer_ends is the end date as YYYY-MM-DD, or null if the page shows no date.",
         "",
         "Give 4 to 6 different wines. Only offers you actually found on a shop page in your search results.",
         "The url MUST be the exact product page URL of that wine and vintage, copied from a search result you used.",
@@ -148,9 +152,12 @@ def _query(style, an):
         ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "normal_price_dkk": number or null,',
         ' "offer_ends": str or null, "drink_from_year": int, "drink_to_year": int, "peak_from_year": int,',
         ' "peak_to_year": int, "window_source": str, "why": str}]}',
-        'where "why" is 2-3 short bullet lines, each starting with "- " (why it fits the buyer, the peak, the deal),',
-        'and "window_source" is a few words naming where the drinking window comes from (e.g. "Wine Spectator",',
-        '"producer", "estimate from the vintage"). Keep every text short and plain.',
+        '"why" is a JSON string (not a list) of 2-3 short factual points about the wine itself, each line starting',
+        'with "- ": its style and grapes, the vintage\'s quality, ageing potential, critic praise. Facts only: do NOT',
+        'mention the buyer, the cellar, preferences, the gap years, the price or the discount (those are shown',
+        'separately). Example: "- Grenache-led, from 100-year-old vines\\n- 2019 is a ripe, structured vintage".',
+        '"window_source" is a few words naming where the drinking window comes from (e.g. "Wine Spectator",',
+        '"producer", "estimate from the vintage").',
     ])
 
 
@@ -185,6 +192,18 @@ def _search(agent, q, label=""):
     return offers
 
 
+def _text(v):
+    """A text field the agent may have returned as a list of points."""
+    if isinstance(v, (list, tuple)):
+        return "\n".join("- " + str(x).strip().lstrip("-• ").strip() for x in v if str(x).strip())
+    return str(v or "")
+
+
+def _date(v):
+    m = re.search(r"\d{4}-\d{2}-\d{2}", str(v or ""))
+    return m.group(0) if m else None
+
+
 def _num(v):
     try:
         return float(v) if v not in (None, "") else None
@@ -212,6 +231,8 @@ def clean_offers(offers, an, owned):
         if urllib.parse.urlparse(url).path.strip("/") == "":
             continue  # a shop's front page is not an offer
         vint = _int(o.get("vintage"))
+        if not vint:
+            continue  # a non-vintage wine has no peak year to plan for
         pf, pt = _int(o.get("peak_from_year")), _int(o.get("peak_to_year"))
         if pf and pt and (pt < pf or (vint and pf < vint)):
             pf = pt = None
@@ -227,10 +248,10 @@ def clean_offers(offers, an, owned):
             "wine": name, "producer": o.get("producer") or "", "vintage": vint, "country": o.get("country") or "",
             "region": o.get("region") or "", "grapes": o.get("grapes") or "", "wine_type": (o.get("wine_type") or "red").lower(),
             "shop": o.get("shop") or urllib.parse.urlparse(url).hostname, "url": url, "price_dkk": round(price),
-            "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc, "offer_ends": o.get("offer_ends"),
+            "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc, "offer_ends": _date(o.get("offer_ends")),
             "drink_from_year": _int(o.get("drink_from_year")), "drink_to_year": _int(o.get("drink_to_year")),
             "peak_from_year": pf, "peak_to_year": pt, "window_source": o.get("window_source") or "",
-            "why": ai.bullets(o.get("why") or ""), "fit": fit, "style": o.get("_style"),
+            "why": ai.bullets(_text(o.get("why"))), "fit": fit, "style": o.get("_style"),
             "owned": owned.get(vocab.key(name)) or owned.get(vocab.key(f"{o.get('producer')}{vint}")),
         })
     out.sort(key=lambda r: (-(r["fit"] > 0), -r["fit"], -(r["discount_pct"] or 0)))

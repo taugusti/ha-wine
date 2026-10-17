@@ -1,3 +1,8 @@
+# 1.23.4
+- Offers: the points about each wine are facts about the wine (style, grapes, vintage, ageing potential, critic praise), not about you, your cellar or the price; price, discount and peak are shown separately.
+- Fixed: the points were shown as one text in brackets when the agent returned them as a list.
+- Offers only for vintage wines (a peak year needs a vintage); prices are per 75 cl bottle, also when the shop sells by the case; "offer ends" is only shown as a date.
+
 # 1.23.3
 - Offers: only offers whose product page was found at the shop are listed. The ones left out are named in a small folded list under the search button.
 

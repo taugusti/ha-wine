@@ -22,7 +22,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 // old prose (no lines) is split into one point per sentence. An "Anecdote" point is shown last, in italics.
 const RICH_FIELDS = new Set(["info", "advice", "serving", "window_basis", "note", "reason"]);
 function points(t) {
+  if (Array.isArray(t)) t = t.join("\n");
   t = String(t ?? "").trim();
+  // a list that was stored as text, e.g. "['- one', '- two']"
+  if (/^\[\s*['"]/.test(t) && /['"]\s*\]$/.test(t)) t = t.slice(1, -1).trim().slice(1, -1).split(/['"]\s*,\s*['"]/).join("\n");
   if (!t) return [];
   let lines = t.split(/\n+/).map((x) => x.trim()).filter(Boolean);
   if (!lines.some((l) => /^[-•*]\s/.test(l))) {
@@ -1148,7 +1151,7 @@ async function renderRecs() {
   let r;
   try { r = await api("api/ai/recs"); } catch (e) { el.innerHTML = `<div class="panel wide"><p class="err">${esc(e.message)}</p></div>`; return; }
   const an = r.analysis, st = r.state || {}, last = r.last, run = st.status === "running";
-  recsOffers = (last?.offers || []).filter((o) => !o.checked || o.link_ok);   // only offers with a confirmed shop page
+  recsOffers = (last?.offers || []).filter((o) => (!o.checked || o.link_ok) && o.vintage);   // only offers with a confirmed shop page
   if (recsOffers.length && !wines.length) { try { wines = await api("api/wines"); } catch { /* matching is optional */ } }
   const maxN = Math.max(an.per_year, ...Object.values(an.peak_by_year));
   const gapYears = new Set(an.gaps.flatMap((g) => Array.from({ length: g.to - g.from + 1 }, (_, i) => g.from + i)));
@@ -1242,7 +1245,7 @@ function offerCard(o, i) {
       ${points(o.why).map((x) => `<li>${esc(x)}</li>`).join("")}
       ${o.drink_from_year ? `<li><b>Drink:</b> ${o.drink_from_year}–${o.drink_to_year}${peak ? `, peak ${peak}` : ""}</li>` : ""}
       ${points(o.window_source).map((x, j) => `<li>${j ? "" : "<b>Window from:</b> "}${esc(x)}</li>`).join("")}
-      ${o.offer_ends ? `<li><b>Offer ends:</b> ${esc(o.offer_ends)}</li>` : ""}
+      ${/^\d{4}-\d{2}-\d{2}/.test(o.offer_ends || "") ? `<li><b>Offer ends:</b> ${esc(o.offer_ends)}</li>` : ""}
       ${o.price_note ? `<li class="warn"><b>Price now:</b> ${esc(o.price_note)}</li>` : ""}
       ${o.checked ? (o.link_ok ? `<li class="linkok">✓ Product page found at ${esc(o.shop)}</li>`
         : `<li class="warn">Not found on ${esc(o.shop)}'s site: the offer may be gone or wrong. The button searches the shop.</li>`) : ""}
