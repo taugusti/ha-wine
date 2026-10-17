@@ -1152,6 +1152,10 @@ async function renderRecs() {
   try { r = await api("api/ai/recs"); } catch (e) { el.innerHTML = `<div class="panel wide"><p class="err">${esc(e.message)}</p></div>`; return; }
   const an = r.analysis, st = r.state || {}, last = r.last, run = st.status === "running";
   recsOffers = (last?.offers || []).filter((o) => (!o.checked || o.link_ok) && o.vintage);
+  const MAXP = 200, MINS = 30;   // the owner's criteria (same as the server's MAX_PRICE / MIN_SAVING)
+  const meetsC = (o) => o.meets ?? ((o.price_dkk ?? 1e9) <= MAXP && Math.max(o.discount_pct || 0, o.real_pct || 0) >= MINS);
+  const good = [], rest = [];
+  recsOffers.forEach((o, i) => (meetsC(o) ? good : rest).push({ o, i }));
   const dropped = [...(last?.dropped || []), ...(last?.offers || []).filter((o) => o.checked && !o.link_ok)];   // only offers with a confirmed shop page
   if (recsOffers.length && !wines.length) { try { wines = await api("api/wines"); } catch { /* matching is optional */ } }
   const maxN = Math.max(an.per_year, ...Object.values(an.peak_by_year));
@@ -1172,7 +1176,10 @@ async function renderRecs() {
       ${last?.errors?.length && !recsOffers.length && last.errors.every((e) => /429|quota/i.test(e)) ? '<p class="warn small">The Google AI quota is used up for now, so the search could not run. The free quota resets daily; try again later.</p>' : ""}
       ${last?.errors?.length ? `<details class="small" data-k="err"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
     </div>
-    ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>`
+    ${last ? (recsOffers.length ? `${good.length ? `<div class="offers">${good.map(({ o, i }) => offerCard(o, i)).join("")}</div>`
+        : `<div class="panel wide"><p class="muted">No offer met your criteria (at most ${MAXP} DKK per bottle and at least ${MINS}% below the price of one bottle or the original price).</p></div>`}
+      ${rest.length ? `<details class="panel fold" data-k="rest"><summary><h2>Other offers</h2><span class="small muted">${rest.length} above ${MAXP} DKK or under ${MINS}% off</span></summary>
+        <div class="offers">${rest.map(({ o, i }) => offerCard(o, i)).join("")}</div></details>` : ""}`
       : last.errors?.length && last.errors.every((e) => /429|quota/i.test(e)) ? "" : `<div class="panel wide"><p class="muted">${dropped.length ? "No offers with a confirmed product page in the last search." : "No offers were found in the last search."}</p></div>`) : ""}
     <div class="sgrid recs-top">
       <details class="panel fold" data-k="gaps"><summary><h2>Peak gaps</h2><span class="small muted">${an.gaps.length ? `Gaps: ${esc(gapTxt)}` : "No gaps"}</span></summary>
@@ -1236,6 +1243,7 @@ const BEFORE = { "earlier price": "earlier price", "single bottle": "for 1 bottl
 function dealChip(o) {
   if (!o.verdict) return "";
   return { good: `<span class="chip deal good">Real deal${o.real_pct ? ` −${o.real_pct}%` : ""}</span>`,
+    some: `<span class="chip deal">Small saving −${o.real_pct}%</span>`,
     normal: '<span class="chip deal">Normal price</span>', dear: '<span class="chip deal dear">Dearer than other shops</span>',
     unchecked: '<span class="chip deal unk">Discount not checked</span>' }[o.verdict] || "";
 }

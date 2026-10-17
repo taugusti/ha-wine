@@ -1,3 +1,8 @@
+# 1.25.0
+- Offers follow your price criteria: at most **200 DKK per bottle** and at least **30 % off** (ideally 40-50 %) the price of one bottle or the original price. The search agent is asked for exactly that.
+- Offers that meet the criteria are listed first; others (too dear or too small a discount) are folded away under "Other offers".
+- The price at other shops is still looked up and shown, with a "Small saving" label for 15-30 % below other shops.
+
 # 1.24.1
 - Offers: the offers that were left out (no product page found) now show their prices (per bottle, quantity, before price, other shops) and a **Search on Google** link, plus the link the agent gave.
 - Fixed: the "No offers with a confirmed product page" message was shown as code.

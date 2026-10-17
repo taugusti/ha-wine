@@ -21,6 +21,8 @@ import linkcheck
 import vocab
 
 YEARS_AHEAD = 15
+MAX_PRICE = 200     # DKK per bottle: offers above this are only shown folded away
+MIN_SAVING = 30     # % below the normal price at other shops
 _state = {"status": "idle"}
 _lock = threading.Lock()
 _cancel = threading.Event()
@@ -134,8 +136,10 @@ def _query(style, an):
         + (f"; producers such as {', '.join(style['producers'][:4])}" if style["producers"] else "")
         + (f"; grapes {', '.join(style['grapes'])}" if style["grapes"] else "") + ".",
         f"Examples from the cellar: {'; '.join(style['examples'])}.",
-        f"The buyer usually pays about {budget} DKK per bottle on offer" + (f" for wines normally around {value} DKK" if value else "")
-        + f". Look for offers up to about {round(budget * 1.6)} DKK per bottle with a clear discount (ideally 25 % or more).",
+        f"The buyer usually pays about {budget} DKK per bottle on offer" + (f" for wines normally around {value} DKK" if value else "") + ".",
+        f"Requirements for every offer: at most {MAX_PRICE} DKK per bottle (the lower the better), and a saving of at least",
+        f"{MIN_SAVING} % (ideally 40-50 %) against the price of ONE bottle or the wine's original price. Leave out offers",
+        "that do not meet both. Also give the price at other Danish shops, so it can be seen whether the saving is real.",
         f"The cellar lacks wines that are at their PEAK in {_gap_text(an['gaps'], y)}. Choose wines and vintages whose",
         "peak (optimal drinking period) falls in those years, based on published drinking windows or the producer's",
         "and vintage's known ageing potential. Similar wines from neighbouring regions are fine if they fit better.",
@@ -210,7 +214,14 @@ def _verdict(real):
     """Is it a real deal? Judged against the price at other shops, not the shop's own 'before' price."""
     if real is None:
         return "unchecked"
-    return "good" if real >= 15 else "normal" if real >= -5 else "dear"
+    return "good" if real >= MIN_SAVING else "some" if real >= 15 else "normal" if real >= -5 else "dear"
+
+
+def meets(o):
+    """The owner's criteria: at most MAX_PRICE per bottle and a saving of at least MIN_SAVING % against the price of
+    one bottle or the original price (the shop's 'before' price), or against other shops."""
+    saving = max(o.get("discount_pct") or 0, o.get("real_pct") or 0)
+    return (o.get("price_dkk") or 9e9) <= MAX_PRICE and saving >= MIN_SAVING
 
 
 def _date(v):
@@ -267,7 +278,7 @@ def clean_offers(offers, an, owned):
             "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc,
             "offer_qty": max(1, _int(o.get("offer_qty")) or 1), "before_basis": str(o.get("before_basis") or "unknown"),
             "market_price_dkk": round(market) if market else None, "market_shop": o.get("market_shop") or "",
-            "real_pct": real, "verdict": _verdict(real), "offer_ends": _date(o.get("offer_ends")),
+            "real_pct": real, "verdict": _verdict(real), "max_price": MAX_PRICE, "min_saving": MIN_SAVING, "offer_ends": _date(o.get("offer_ends")),
             "drink_from_year": _int(o.get("drink_from_year")), "drink_to_year": _int(o.get("drink_to_year")),
             "peak_from_year": pf, "peak_to_year": pt, "window_source": o.get("window_source") or "",
             "why": ai.bullets(_text(o.get("why"))), "fit": fit, "style": o.get("_style"),
@@ -339,9 +350,12 @@ def run(enrich):
 
 def sort_offers(offers):
     """Confirmed shop pages first, then best gap fit, then biggest discount."""
-    rank = {"good": 0, "unchecked": 1, "normal": 2, "dear": 3}
-    return sorted(offers, key=lambda r: (not r.get("link_ok"), -(r["fit"] > 0), rank.get(r.get("verdict"), 1), -r["fit"],
-                                         -(r.get("real_pct") if r.get("real_pct") is not None else r.get("discount_pct") or 0)))
+    rank = {"good": 0, "unchecked": 1, "some": 2, "normal": 3, "dear": 4}
+    for o in offers:
+        o["meets"] = meets(o)
+    return sorted(offers, key=lambda r: (not r.get("link_ok"), not r["meets"], rank.get(r.get("verdict"), 1), -(r["fit"] > 0),
+                                         -(r.get("real_pct") if r.get("real_pct") is not None else r.get("discount_pct") or 0),
+                                         r.get("price_dkk") or 0))
 
 
 def _recheck():
