@@ -1,3 +1,6 @@
+# 1.25.1
+- Offers: the search agent no longer gives up when it cannot find 4-6 wines that match everything: it may return fewer, and the peak only has to overlap the gap years (its own estimate is fine).
+
 # 1.25.0
 - Offers follow your price criteria: at most **200 DKK per bottle** and at least **30 % off** (ideally 40-50 %) the price of one bottle or the original price. The search agent is asked for exactly that.
 - Offers that meet the criteria are listed first; others (too dear or too small a discount) are folded away under "Other offers".
