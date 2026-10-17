@@ -16,6 +16,7 @@ from datetime import date
 
 import ai
 import db
+import linkcheck
 import vocab
 
 YEARS_AHEAD = 15
@@ -128,7 +129,10 @@ def _query(style, an):
         "peak (optimal drinking period) falls in those years, based on published drinking windows or the producer's",
         "and vintage's known ageing potential. Similar wines from neighbouring regions are fine if they fit better.",
         "",
-        "Give 4 to 6 different wines. Only offers you actually found on a shop page, with the product page URL.",
+        "Give 4 to 6 different wines. Only offers you actually found on a shop page in your search results.",
+        "The url MUST be the exact product page URL of that wine and vintage, copied from a search result you used.",
+        "Never build or guess a URL, and never give a front page, category page or search page. If you do not have the",
+        "exact product URL, leave the wine out. Use the wine name and vintage exactly as the shop writes them.",
         "Return ONLY this JSON, no other text:",
         '{"offers": [{"wine": str, "producer": str, "vintage": int, "country": str, "region": str, "grapes": str,',
         ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "normal_price_dkk": number or null,',
@@ -240,7 +244,11 @@ def run(enrich):
                         offers.append(o)
             except Exception as e:  # noqa: BLE001
                 errors.append(f"{label}: {str(e)[:160]}")
-        result = {"created": time.strftime("%Y-%m-%d %H:%M"), "analysis": an, "offers": clean_offers(offers, an, owned),
+        cleaned = clean_offers(offers, an, owned)
+        with _lock:
+            _state.update(stage=f"checking {len(cleaned)} shop links")
+        cleaned = sort_offers(linkcheck.check_all(cleaned))
+        result = {"created": time.strftime("%Y-%m-%d %H:%M"), "analysis": an, "offers": cleaned,
                   "errors": errors, "agent": agent}
         with db.lock():
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('recommendations', ?)", (json.dumps(result, ensure_ascii=False),))
@@ -251,6 +259,39 @@ def run(enrich):
             _state.update(status="error", error=str(e)[:300], stage=None, finished=time.time())
     finally:
         con.close()
+
+
+def sort_offers(offers):
+    """Confirmed shop pages first, then best gap fit, then biggest discount."""
+    return sorted(offers, key=lambda r: (not r.get("link_ok"), -(r["fit"] > 0), -r["fit"], -(r.get("discount_pct") or 0)))
+
+
+def _recheck():
+    con = db.connect()
+    try:
+        res = last(con)
+        if res and res.get("offers"):
+            res["offers"] = sort_offers(linkcheck.check_all(res["offers"]))
+            with db.lock():
+                con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('recommendations', ?)",
+                            (json.dumps(res, ensure_ascii=False),))
+        with _lock:
+            _state.update(status="done", stage=None, finished=time.time())
+    except Exception as e:  # noqa: BLE001
+        with _lock:
+            _state.update(status="error", error=str(e)[:300], stage=None, finished=time.time())
+    finally:
+        con.close()
+
+
+def recheck():
+    """Check the links of the last search again (for results from before 1.22, or shops that changed)."""
+    with _lock:
+        if _state.get("status") == "running":
+            return
+        _state.clear()
+        _state.update(status="running", stage="checking shop links", started=time.time())
+    threading.Thread(target=_recheck, daemon=True).start()
 
 
 def start(enrich):

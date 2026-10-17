@@ -414,6 +414,9 @@ class H(BaseHTTPRequestHandler):
                                        "analysis": recommend.analysis(c, enrich)})
             finally:
                 c.close()
+        if path == "/api/ai/recs/check" and method == "POST":
+            recommend.recheck()
+            return self.send(200, {"state": recommend.status()})
         if path == "/api/ai/recs/cancel" and method == "POST":
             recommend.cancel()
             return self.send(200, {"state": recommend.status()})

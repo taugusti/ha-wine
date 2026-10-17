@@ -1,3 +1,10 @@
+# 1.22.0
+- **Swipe back / back button** now works inside the app: it closes the open wine, filter, camera or dialog, or goes back to the previous tab, instead of leaving Wine Cellar. Unsaved changes still ask before the wine closes.
+- Offers: every shop link is checked by the app. It opens the page and confirms it is the product page for that wine and vintage; if the link points to a category, a search page or another wine, the app looks for the right product on that page or with the shop's own search. Confirmed offers show "✓ Product page found" and come first. When the wine cannot be found on the shop's site the card says so and the button becomes a search on that shop instead of a wrong link. If the shop's page shows another price, it is shown.
+- The search agent is told to give only exact product page URLs.
+- Results from earlier searches get their links checked once when the Offers tab is opened.
+- Offers tab: **Find offers** and the last search are at the top, followed by the offers; "Peak gaps" and "What you buy most" are folded below and open on tap.
+
 # 1.21.0
 - Offers: each wine found now says whether you already have it. "You have this vintage: N bottles" when the same vintage is in the cellar, and "You have other vintages" with each vintage and its bottle count (tap one to open it). The match ignores the vintage and words like Château/Domaine, and uses the producer, so a slightly different name from the shop still matches.
 - "Open in cellar" is shown only for the same vintage; for another vintage you get "Add to cellar".

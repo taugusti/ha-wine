@@ -998,7 +998,12 @@ if (navigator.mediaDevices?.getUserMedia && window.isSecureContext) {
 $("#newWine").addEventListener("click", () => openWine(null));
 
 // ------------------------------------------------------------- tabs
-$$(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+$$(".tabs button").forEach((b) => b.addEventListener("click", () => {
+  if (b.dataset.tab === curTab()) return;
+  showTab(b.dataset.tab);
+  try { history.pushState({ wc: 1, tab: b.dataset.tab, layers: 0 }, ""); } catch { /* ignore */ }
+}));
+const curTab = () => $(".tabs button.on")?.dataset.tab || "list";
 function showTab(name) {
   $$(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   $$(".tab").forEach((t) => t.classList.toggle("on", t.id === "tab-" + name));
@@ -1102,29 +1107,30 @@ async function renderRecs() {
   const peakRows = Object.entries(an.peak_by_year).map(([y, n]) => `<div class="hb ${gapYears.has(Number(y)) ? "gap" : "st-peak"}">
       <span>${y}</span><span class="t" style="width:${(n / maxN) * 100}%"></span><span class="n">${n}</span></div>`).join("");
   const gapTxt = an.gaps.length ? an.gaps.map((g) => (g.from === g.to ? g.from : `${g.from}–${g.to}`)).join(", ") : "none";
+  const top = an.styles[0];
   el.innerHTML = `
-    <div class="sgrid recs-top">
-      <div class="panel"><h2>Peak gaps</h2>
-        <p class="small muted">You drink about <b>${an.per_year}</b> bottles a year. Years where fewer of today's bottles are at peak than that are marked as gaps.</p>
-        <div class="hbars target" style="--target:${(an.per_year / maxN) * 100}%">${peakRows}</div>
-        <p class="small">Gaps: <b>${esc(gapTxt)}</b></p></div>
-      <div class="panel"><h2>What you buy most</h2>
-        <ul class="styles">${an.styles.map((x) => `<li><b>${esc(x.type)} · ${esc(x.area)}</b> <span class="muted">${x.area !== x.country ? esc(x.country) + " · " : ""}${x.bottles} bottles</span>
-          <div class="small muted">${[esc(x.producers.slice(0, 3).join(", ")), x.paid_median ? `usually paid ${kr(x.paid_median)}${x.value_median ? `, value ${kr(x.value_median)}` : ""}` : ""].filter(Boolean).join(" · ")}</div></li>`).join("")}</ul>
-      </div>
-      <div class="panel"><h2>Find offers</h2>
-        <p class="small muted">Searches Danish wine shops for current offers in your top ${Math.min(3, an.styles.length)} styles, with a peak in the gap years. It uses the web search agent in Home Assistant and takes a few minutes.</p>
-        <div class="row">${run ? `<span><span class="spin"></span> ${esc(st.stage || "searching")} …</span><button class="btn" id="recsStop">Stop</button>`
-          : `<button class="btn primary" id="recsGo">🔎 Find offers</button>`}</div>
-        ${st.status === "error" ? `<p class="err small">${esc(st.error)}</p>` : ""}
-        ${last ? `<p class="small muted">Last search: ${esc(last.created)}${last.errors?.length ? ` · ${last.errors.length} searches failed` : ""}</p>` : ""}
-        ${last?.errors?.length && !recsOffers.length && last.errors.every((e) => /429|quota/i.test(e)) ? '<p class="warn small">The Google AI quota is used up for now, so the search could not run. The free quota resets daily; try again later.</p>' : ""}
-        ${last?.errors?.length ? `<details class="small"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
-      </div>
+    <div class="panel recsbar">
+      <div class="row">${run ? `<span><span class="spin"></span> ${esc(st.stage || "searching")} …</span><button class="btn" id="recsStop">Stop</button>`
+        : `<button class="btn primary" id="recsGo">🔎 Find offers</button>`}
+        ${last ? `<span class="small muted">Last search: ${esc(last.created)}${last.errors?.length ? ` · ${last.errors.length} searches failed` : ""}</span>` : ""}</div>
+      ${st.status === "error" ? `<p class="err small">${esc(st.error)}</p>` : ""}
+      ${last?.errors?.length && !recsOffers.length && last.errors.every((e) => /429|quota/i.test(e)) ? '<p class="warn small">The Google AI quota is used up for now, so the search could not run. The free quota resets daily; try again later.</p>' : ""}
+      ${last?.errors?.length ? `<details class="small"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
     </div>
-    ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>
-      <p class="small muted">Prices and offers come from a web search and can be outdated or wrong. Check the price at the shop before you buy.</p>`
-      : last.errors?.length ? "" : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}`;
+    ${last ? (recsOffers.length ? `<div class="offers">${recsOffers.map(offerCard).join("")}</div>`
+      : last.errors?.length ? "" : '<div class="panel wide"><p class="muted">No offers were found in the last search.</p></div>') : ""}
+    <div class="sgrid recs-top">
+      <details class="panel fold"><summary><h2>Peak gaps</h2><span class="small muted">${an.gaps.length ? `Gaps: ${esc(gapTxt)}` : "No gaps"}</span></summary>
+        <p class="small muted">You drink about <b>${an.per_year}</b> bottles a year. Years where fewer of today's bottles are at peak than that are marked as gaps.</p>
+        <div class="hbars target" style="--target:${(an.per_year / maxN) * 100}%">${peakRows}</div></details>
+      <details class="panel fold"><summary><h2>What you buy most</h2><span class="small muted">${top ? `${esc(top.type)} · ${esc(top.area)}${an.styles.length > 1 ? ` +${an.styles.length - 1}` : ""}` : ""}</span></summary>
+        <ul class="styles">${an.styles.map((x) => `<li><b>${esc(x.type)} · ${esc(x.area)}</b> <span class="muted">${x.area !== x.country ? esc(x.country) + " · " : ""}${x.bottles} bottles</span>
+          <div class="small muted">${[esc(x.producers.slice(0, 3).join(", ")), x.paid_median ? `usually paid ${kr(x.paid_median)}${x.value_median ? `, value ${kr(x.value_median)}` : ""}` : ""].filter(Boolean).join(" · ")}</div></li>`).join("")}</ul></details>
+    </div>`;
+  if (!run && recsOffers.some((o) => !o.checked) && !renderRecs.checking) {   // results from before 1.22: check their links once
+    renderRecs.checking = true;
+    try { await send("api/ai/recs/check", "POST", {}); setTimeout(renderRecs, 1500); } catch { /* ignore */ }
+  }
   clearTimeout(recsTimer);
   if (run && $("#tab-recs").classList.contains("on")) recsTimer = setTimeout(renderRecs, 4000);
 }
@@ -1167,7 +1173,7 @@ function ownedNote(m) {
 function offerCard(o, i) {
   const m = cellarMatch(o), mine = m.same[0];
   const peak = o.peak_from_year ? (o.peak_from_year === o.peak_to_year ? o.peak_from_year : `${o.peak_from_year}–${o.peak_to_year}`) : null;
-  return `<div class="panel offer">
+  return `<div class="panel offer ${o.checked && !o.link_ok ? "unconfirmed" : ""}">
     <div class="ohead"><div><div class="wname">${esc(o.wine)}${o.vintage && !String(o.wine).includes(o.vintage) ? " " + o.vintage : ""}</div>
       <div class="sub">${esc([o.producer, o.region, o.country].filter(Boolean).join(" · "))}</div></div>
       <div class="oprice"><b>${kr(o.price_dkk)}</b>${o.normal_price_dkk ? `<s>${kr(o.normal_price_dkk)}</s>` : ""}${o.discount_pct ? `<span class="disc">−${o.discount_pct}%</span>` : ""}</div></div>
@@ -1176,7 +1182,10 @@ function offerCard(o, i) {
     ${ownedNote(m)}
     ${o.why ? `<p class="small">${esc(o.why)}</p>` : ""}
     <p class="small muted">${o.drink_from_year ? `Drink ${o.drink_from_year}–${o.drink_to_year}` : ""}${o.window_source ? ` · ${esc(o.window_source)}` : ""}${o.offer_ends ? ` · offer ends ${esc(o.offer_ends)}` : ""}</p>
-    <div class="row"><a class="btn primary" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.shop)} ↗</a>
+    ${o.price_note ? `<p class="small warn">Price now: ${esc(o.price_note)}</p>` : ""}
+    ${o.checked ? (o.link_ok ? `<p class="small linkok">✓ Product page found at ${esc(o.shop)}</p>`
+      : `<p class="small warn">Not found on ${esc(o.shop)}'s site, so the offer may be gone or wrong. The button searches the shop.</p>`) : ""}
+    <div class="row"><a class="btn ${o.link_ok ? "primary" : ""}" href="${esc(o.url)}" target="_blank" rel="noopener">${o.checked && !o.link_ok ? `Search ${esc(o.shop)}` : esc(o.shop)} ↗</a>
       ${mine ? `<button class="btn" data-openw="${mine.id}">Open in cellar</button>` : `<button class="btn" data-addoffer="${i}">Add to cellar</button>`}</div>
   </div>`;
 }
@@ -1364,7 +1373,7 @@ const _close = closeDrawer;
 closeDrawer = function () { _close(); checkVersion(); };
 
 updateReviewCount();
-refresh().then(() => showTab(load("tab", "list"))).catch((e) => toast("Could not load data: " + e.message));
+refresh().then(() => { showTab(load("tab", "list")); initHistory(); }).catch((e) => toast("Could not load data: " + e.message));
 
 // Direct access (own port with login): show who is logged in and a log-out button
 api("api/session").then((s) => {
@@ -1372,3 +1381,44 @@ api("api/session").then((s) => {
   const b = $("#logout");
   b.hidden = false; b.title = `Logged in as ${s.user}`;
 }).catch(() => { /* older server or not available */ });
+
+
+// ------------------------------------------------------------- back gesture / back button (1.22)
+// Every open layer (wine, filter, camera, dialog) and every tab change is a browser history entry, so "swipe back"
+// closes the top layer or returns to the previous tab instead of leaving the app. The history depth follows what is
+// actually open: a layer closed with a button takes its history entry back out again.
+const LAYERS = [   // top first
+  { open: () => !$("#ask").hidden, close: () => $("#ask").click() },          // a click on the backdrop dismisses it
+  { open: () => !$("#pcam").hidden, close: () => closePhotoCamera() },
+  { open: () => !$("#cam").hidden, close: () => $("#camClose").click() },
+  { open: () => filterOpen(), close: () => closeFilter() },
+  { open: () => $("#drawer").classList.contains("open"), close: () => requestClose() },
+];
+const openLayers = () => LAYERS.filter((l) => l.open()).length;
+let ownBacks = 0;   // history.back() calls made by the app itself, whose popstate is not a user's back
+function syncHistory() {
+  const st = history.state;
+  if (!st?.wc) return;
+  const n = openLayers();
+  if (n > st.layers) history.pushState({ ...st, layers: n }, "");
+  else if (n < st.layers) { ownBacks++; history.back(); }
+}
+function initHistory() {
+  try { history.replaceState({ wc: 1, tab: curTab(), layers: 0 }, ""); } catch { return; }
+  let queued = false;
+  const mo = new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    setTimeout(() => { queued = false; syncHistory(); }, 0);
+  });
+  ["#ask", "#pcam", "#cam", "#fSheet", "#drawer"].forEach((id) => mo.observe($(id), { attributes: true, attributeFilter: ["hidden", "class"] }));
+  window.addEventListener("popstate", (e) => {
+    const st = e.state;
+    if (ownBacks > 0) { ownBacks--; syncHistory(); return; }
+    if (!st?.wc) return;
+    const n = openLayers();
+    if (n > st.layers) { LAYERS.find((l) => l.open())?.close(); return; }   // the observer re-syncs if it stays open
+    if (st.tab && st.tab !== curTab()) showTab(st.tab);
+  });
+  syncHistory();
+}

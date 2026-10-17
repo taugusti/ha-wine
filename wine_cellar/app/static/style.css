@@ -458,3 +458,17 @@ body.noscroll { overflow: hidden; }
   cursor: pointer; color: var(--text); white-space: nowrap; }
 .vlink:hover { border-color: var(--accent); color: var(--accent); }
 .vlink.zero { color: var(--muted); }
+
+/* 1.22: offers tab — compact top bar, folded analysis, checked links */
+.recsbar { margin-bottom: 14px; }
+.recsbar .row { margin: 0; align-items: center; flex-wrap: wrap; }
+.recsbar p { margin: 8px 0 0; }
+.recs-top { margin-top: 14px; }
+details.fold > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary h2 { margin: 0; }
+details.fold > summary::after { content: "▸"; color: var(--muted); margin-left: auto; }
+details.fold[open] > summary::after { content: "▾"; }
+details.fold[open] > summary { margin-bottom: 10px; }
+.linkok { color: var(--ready); }
+.offer.unconfirmed { opacity: .8; }
