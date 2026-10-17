@@ -1,3 +1,8 @@
+# 1.20.0
+- **Filter** button next to the search field: filter the wine list on price (value or price paid, with quick ranges), grape, region, country, vintage, wine type, drinking status and wines with 0 bottles. On phones it opens as a sheet from the bottom, so the list keeps the screen; the button shows how many filters are on.
+- Active filters are shown as small chips under the search field; tap one to remove it, or "Clear all". Filters are remembered on the device.
+- The country and status dropdowns moved into the filter, which gives the search field the full width on phones.
+
 # 1.19.2
 - Fixed: direct-access login was refused for every user, because the login check sent the app token in a header the Supervisor reads as the user's credentials.
 

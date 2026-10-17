@@ -27,20 +27,12 @@
   <section id="tab-list" class="tab on">
     <div class="toolbar">
       <div class="search">
-        <input id="q" type="search" placeholder="Search wine, producer, region, grape … or scan a barcode" autocomplete="off">
+        <input id="q" type="search" placeholder="Search or scan a barcode" autocomplete="off">
+        <button class="btn icon fbtn" id="fBtn" title="Filter: price, grape, region …" aria-label="Filter" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span class="badge" id="fCount" hidden></span></button>
         <button class="btn icon scanbtn" id="camBtn" hidden title="Scan a barcode with the camera" aria-label="Scan barcode"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg></button>
       </div>
-      <select id="fCountry"><option value="">All countries</option></select>
-      <select id="fStatus">
-        <option value="">Any drinking status</option>
-        <option value="over">Past window</option>
-        <option value="now">Drink soon (this/next year)</option>
-        <option value="peak">At peak</option>
-        <option value="ready">Ready</option>
-        <option value="young">Too young</option>
-      </select>
-      <label class="chk"><input type="checkbox" id="fAll"> Show wines with 0 bottles</label>
     </div>
+    <div class="fchips" id="fChips" hidden></div>
     <div class="summary" id="summary"></div>
     <div class="tablewrap">
       <table id="tbl">
@@ -115,6 +107,31 @@
     <span class="pcam-spacer"></span>
   </div>
 </div>
+<div class="fsheet" id="fSheet" hidden>
+  <div class="fbox" role="dialog" aria-modal="true" aria-labelledby="fTitle">
+    <div class="fhead"><h3 id="fTitle">Filter</h3><button class="btn icon" id="fClose" aria-label="Close">✕</button></div>
+    <div class="fbody">
+      <div class="frow2">
+        <label>Country<select id="fCountry"><option value="">All</option></select></label>
+        <label>Region<input type="search" id="fRegion" list="dl-fregion" placeholder="Any region" autocomplete="off"></label>
+      </div>
+      <label>Grape<input type="search" id="fGrape" list="dl-fgrape" placeholder="Any grape" autocomplete="off"></label>
+      <div class="fgroup"><span class="flabel">Price per bottle (DKK)</span>
+        <div class="seg" id="fBasis"><button type="button" data-v="value" class="on">Value</button><button type="button" data-v="paid">Paid</button></div>
+        <div class="frange"><input type="number" id="fPmin" inputmode="numeric" min="0" placeholder="Min"><span>–</span><input type="number" id="fPmax" inputmode="numeric" min="0" placeholder="Max"></div>
+        <div class="fquick" id="fPquick"><button type="button" data-p="-150">≤ 150</button><button type="button" data-p="150-300">150–300</button><button type="button" data-p="300-600">300–600</button><button type="button" data-p="600-">600+</button></div>
+      </div>
+      <div class="fgroup"><span class="flabel">Vintage</span>
+        <div class="frange"><input type="number" id="fVmin" inputmode="numeric" placeholder="From"><span>–</span><input type="number" id="fVmax" inputmode="numeric" placeholder="To"></div>
+      </div>
+      <div class="fgroup"><span class="flabel">Type</span><div class="fquick" id="fType"></div></div>
+      <div class="fgroup"><span class="flabel">Drinking status</span><div class="fquick" id="fStatus"></div></div>
+      <label class="chk"><input type="checkbox" id="fAll"> Show wines with 0 bottles</label>
+    </div>
+    <div class="ffoot"><button class="btn" id="fReset">Reset</button><button class="btn primary" id="fApply">Show wines</button></div>
+  </div>
+</div>
+<datalist id="dl-fregion"></datalist><datalist id="dl-fgrape"></datalist>
 <div class="ask" id="ask" hidden></div>
 <div class="toast" id="toast" role="status"></div>
 

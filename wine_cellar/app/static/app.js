@@ -61,28 +61,123 @@ function status(w) {
 // ------------------------------------------------------------- list
 async function refresh() {
   wines = await api("api/wines");
-  const countries = [...new Map(wines.filter((w) => w.country).map((w) => [fold(w.country), w.country])).values()].sort((a, b) => a.localeCompare(b, "en"));
-  const sel = $("#fCountry"), cur = sel.value;
-  sel.innerHTML = '<option value="">All countries</option>' + countries.map((c) => `<option value="${esc(fold(c))}">${esc(c[0].toUpperCase() + c.slice(1))}</option>`).join("");
-  sel.value = cur;
   render();
 }
 
+// filters (1.20): kept in one object, edited in the filter sheet, shown as removable chips under the search field
+const F0 = { country: "", region: "", grape: "", basis: "value", pmin: "", pmax: "", vmin: "", vmax: "", types: [], status: "", all: false };
+let flt = { ...F0, ...load("filter", {}) };
+const priceOf = (w) => flt.basis === "paid" ? w.purchase_price : (w.list_price ?? w.purchase_price);
+const num = (v) => v === "" || v == null ? null : Number(v);
+
+function matches(w, f = flt, terms = []) {
+  if (!f.all && !(w.stock > 0)) return false;
+  if (w.archived && !f.all) return false;
+  if (f.country && fold(w.country) !== fold(f.country)) return false;
+  if (f.region && !fold(w.region).includes(fold(f.region).trim())) return false;
+  if (f.grape && !fold(w.grapes).includes(fold(f.grape).trim())) return false;
+  if (f.types.length && !f.types.includes(w.wine_type || "red")) return false;
+  if (f.status && status(w) !== f.status) return false;
+  const lo = num(f.pmin), hi = num(f.pmax);
+  if (lo != null || hi != null) {
+    const p = priceOf(w);
+    if (p == null || (lo != null && p < lo) || (hi != null && p > hi)) return false;
+  }
+  const vlo = num(f.vmin), vhi = num(f.vmax);
+  if (vlo != null || vhi != null) {
+    const v = Number(w.vintage);
+    if (!v || (vlo != null && v < vlo) || (vhi != null && v > vhi)) return false;
+  }
+  if (terms.length) {
+    const hay = fold([w.description, w.producer, w.country, w.region, w.grapes, w.vintage, w.shop, w.note, w.barcode, w.location, w.wine_type].join(" "));
+    if (!terms.every((t) => hay.includes(t))) return false;
+  }
+  return true;
+}
 function filtered() {
   const terms = fold($("#q").value).split(/\s+/).filter(Boolean);
-  const country = $("#fCountry").value, st = $("#fStatus").value, all = $("#fAll").checked;
-  return wines.filter((w) => {
-    if (!all && !(w.stock > 0)) return false;
-    if (w.archived && !all) return false;
-    if (country && fold(w.country) !== country) return false;
-    if (st && status(w) !== st) return false;
-    if (terms.length) {
-      const hay = fold([w.description, w.producer, w.country, w.region, w.grapes, w.vintage, w.shop, w.note, w.barcode, w.location, w.wine_type].join(" "));
-      if (!terms.every((t) => hay.includes(t))) return false;
-    }
-    return true;
-  });
+  return wines.filter((w) => matches(w, flt, terms));
 }
+
+// the active filters as short labels, each with a function that removes it
+function activeFilters() {
+  const a = [], kr0 = (v) => Number(v).toLocaleString("en-GB");
+  if (flt.country) a.push([flt.country, () => { flt.country = ""; }]);
+  if (flt.region) a.push([flt.region, () => { flt.region = ""; }]);
+  if (flt.grape) a.push([flt.grape, () => { flt.grape = ""; }]);
+  if (flt.pmin !== "" || flt.pmax !== "") {
+    const lbl = flt.pmin !== "" && flt.pmax !== "" ? `${kr0(flt.pmin)}–${kr0(flt.pmax)}` : flt.pmin !== "" ? `≥ ${kr0(flt.pmin)}` : `≤ ${kr0(flt.pmax)}`;
+    a.push([`${flt.basis === "paid" ? "Paid" : "Value"} ${lbl} DKK`, () => { flt.pmin = flt.pmax = ""; }]);
+  }
+  if (flt.vmin !== "" || flt.vmax !== "") a.push([flt.vmin !== "" && flt.vmax !== "" ? (flt.vmin === flt.vmax ? flt.vmin : `${flt.vmin}–${flt.vmax}`) : flt.vmin !== "" ? `${flt.vmin} or later` : `${flt.vmax} or older`, () => { flt.vmin = flt.vmax = ""; }]);
+  flt.types.forEach((t) => a.push([t[0].toUpperCase() + t.slice(1), () => { flt.types = flt.types.filter((x) => x !== t); }]));
+  if (flt.status) a.push([STATUS[flt.status], () => { flt.status = ""; }]);
+  if (flt.all) a.push(["Incl. 0 bottles", () => { flt.all = false; }]);
+  return a;
+}
+function setFilter(patch) {
+  Object.assign(flt, patch); save("filter", flt);
+  if (!$("#fSheet").hidden) fillSheet();
+  render();
+}
+function renderFilterChips() {
+  const a = activeFilters();
+  $("#fCount").hidden = !a.length; $("#fCount").textContent = a.length;
+  $("#fBtn").classList.toggle("act", a.length > 0);
+  const box = $("#fChips"); box.hidden = !a.length;
+  box.innerHTML = a.map(([l], i) => `<button type="button" class="chipv" data-rmf="${i}" title="Remove filter">${esc(l)}<span aria-hidden="true">×</span></button>`).join("")
+    + (a.length > 1 ? '<button type="button" class="linkbtn" data-rmf="all">Clear all</button>' : "");
+}
+$("#fChips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-rmf]"); if (!b) return;
+  if (b.dataset.rmf === "all") { flt = { ...F0, basis: flt.basis }; setFilter({}); return; }
+  activeFilters()[Number(b.dataset.rmf)]?.[1](); setFilter({});
+});
+
+// filter sheet: a bottom sheet on phones, a small dialog on wider screens; filters apply while you choose
+function fillSheet() {
+  const sel = $("#fCountry");
+  const countries = vocabCounts("country").sort((a, b) => a.localeCompare(b, "en"));
+  if (flt.country && !countries.some((c) => fold(c) === fold(flt.country))) countries.unshift(flt.country);
+  sel.innerHTML = '<option value="">All</option>' + countries.map((c) => `<option ${fold(c) === fold(flt.country) ? "selected" : ""}>${esc(c)}</option>`).join("");
+  $("#dl-fregion").innerHTML = options([...new Set([...vocabCounts("region", { country: flt.country }), ...vocabCounts("region", { whole: true, country: flt.country })])]);
+  $("#dl-fgrape").innerHTML = options(vocabCounts("grapes"));
+  const setv = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v; };
+  setv("#fRegion", flt.region); setv("#fGrape", flt.grape);
+  setv("#fPmin", flt.pmin); setv("#fPmax", flt.pmax); setv("#fVmin", flt.vmin); setv("#fVmax", flt.vmax);
+  $$("#fBasis button").forEach((b) => b.classList.toggle("on", b.dataset.v === flt.basis));
+  $$("#fPquick button").forEach((b) => b.classList.toggle("on", b.dataset.p === `${flt.pmin}-${flt.pmax}`));
+  const types = [...new Set([...TYPES, ...wines.map((w) => w.wine_type).filter(Boolean)])];
+  $("#fType").innerHTML = types.map((t) => `<button type="button" data-t="${esc(t)}" class="${flt.types.includes(t) ? "on" : ""}">${esc(t)}</button>`).join("");
+  $("#fStatus").innerHTML = ["peak", "now", "ready", "young", "over"].map((k) => `<button type="button" data-s="${k}" class="${flt.status === k ? "on" : ""}"><i class="dot s-${k}"></i>${STATUS[k]}</button>`).join("");
+  $("#fAll").checked = flt.all;
+  const n = wines.filter((w) => matches(w)).length;
+  $("#fApply").textContent = `Show ${n} wine${n === 1 ? "" : "s"}`;
+}
+function openFilter() { fillSheet(); $("#fSheet").hidden = false; document.body.classList.add("noscroll"); }
+function closeFilter() { $("#fSheet").hidden = true; document.body.classList.remove("noscroll"); }
+const filterOpen = () => !$("#fSheet").hidden;
+$("#fBtn").addEventListener("click", openFilter);
+["#fClose", "#fApply"].forEach((s) => $(s).addEventListener("click", closeFilter));
+$("#fSheet").addEventListener("click", (e) => { if (e.target.id === "fSheet") closeFilter(); });
+$("#fReset").addEventListener("click", () => { flt = { ...F0, basis: flt.basis }; setFilter({}); });
+$("#fCountry").addEventListener("change", (e) => setFilter({ country: e.target.value }));
+[["#fRegion", "region"], ["#fGrape", "grape"], ["#fPmin", "pmin"], ["#fPmax", "pmax"], ["#fVmin", "vmin"], ["#fVmax", "vmax"]]
+  .forEach(([id, k]) => $(id).addEventListener("input", (e) => setFilter({ [k]: e.target.value.trim() })));
+$("#fAll").addEventListener("change", (e) => setFilter({ all: e.target.checked }));
+$("#fBasis").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ basis: b.dataset.v }); });
+$("#fPquick").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const [lo, hi] = b.dataset.p.split("-");
+  setFilter(b.classList.contains("on") ? { pmin: "", pmax: "" } : { pmin: lo, pmax: hi });
+});
+$("#fType").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const t = b.dataset.t;
+  setFilter({ types: flt.types.includes(t) ? flt.types.filter((x) => x !== t) : [...flt.types, t] });
+});
+$("#fStatus").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ status: flt.status === b.dataset.s ? "" : b.dataset.s }); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && filterOpen()) closeFilter(); });
 
 function cmp(a, b) {
   const k = sort.k;
@@ -128,6 +223,7 @@ function render() {
   </tr>`).join("") || `<tr><td colspan="7" class="muted" style="padding:30px;text-align:center">No wines match.</td></tr>`;
   const bottles = rows.reduce((s, w) => s + Math.max(0, w.stock), 0);
   const due = rows.filter((w) => w.stock > 0 && w.drink_year_to != null && w.drink_year_to <= Y + 1).reduce((s, w) => s + w.stock, 0);
+  renderFilterChips();
   $("#summary").innerHTML = `<b>${rows.length}</b> wines · <b>${bottles}</b> bottles` + (due ? ` · <span class="s-now"><b>${due}</b> bottles should be drunk by next year</span>` : "");
 }
 
@@ -786,7 +882,7 @@ $("#drawer").addEventListener("input", (e) => {
   clearTimeout(renderEst.t); renderEst.t = setTimeout(() => { renderEst(); scoreLinks(); }, 300);
 });
 $("#scrim").addEventListener("click", () => requestClose());
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && $("#pcam").hidden && !askOpen()) requestClose(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && $("#pcam").hidden && !askOpen() && !filterOpen()) requestClose(); });
 
 // ------------------------------------------------------------- search, sort, scan
 $("#tbl thead").addEventListener("click", (e) => {
@@ -795,7 +891,7 @@ $("#tbl thead").addEventListener("click", (e) => {
   save("sort", sort); render();
 });
 $("#tbl tbody").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) openWine(tr.dataset.id); });
-["#q", "#fCountry", "#fStatus", "#fAll"].forEach((s) => $(s).addEventListener("input", render));
+$("#q").addEventListener("input", render);
 $("#q").addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   const v = $("#q").value.trim();
@@ -806,7 +902,7 @@ async function scanned(code, fromCamera = false) {
   const hits = await api("api/lookup?barcode=" + encodeURIComponent(code));
   $("#q").value = ""; render();
   if (hits.length === 1) openWine(hits[0].id, {}, 0, { checkout: fromCamera });
-  else if (hits.length > 1) { $("#q").value = code; $("#fAll").checked = true; render(); toast(`${hits.length} wines share this barcode`); }
+  else if (hits.length > 1) { $("#q").value = code; setFilter({ all: true }); toast(`${hits.length} wines share this barcode`); }
   else { toast("Unknown barcode, creating a new wine"); openWine(null, { barcode: code }); }
 }
 
