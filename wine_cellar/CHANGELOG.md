@@ -1,3 +1,6 @@
+# 1.31.0
+- Default sort (by peak): wines in stock that should be drunk soon come first: drinking window ending this or next year ("Drink soon"), or peak ending this or next year. Soonest first, then the rest by end of peak. Wines without a barcode still come before everything else.
+
 # 1.30.0
 - No more distinction between Excel and app wines: wines without any stock history get a placeholder stock count of 0 bottles dated 2022-01-01 (once for existing wines, and on every Excel import). Only wines created in the app and never stocked show as "New · not in stock yet".
 

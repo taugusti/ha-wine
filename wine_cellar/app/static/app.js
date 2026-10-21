@@ -259,7 +259,13 @@ const newest = (a, b) => String(b.created_at || "").localeCompare(String(a.creat
 function render() {
   // wines without a barcode first (newest created first), then the chosen sort
   // within those, newest created first
-  const rows = filtered().sort((a, b) => (noBarcode(b) - noBarcode(a)) || (noBarcode(a) && noBarcode(b) ? newest(a, b) : cmp(a, b)));
+  // default peak sort: bottles that should be drunk soon come first (window ends this/next year, or the peak ends
+  // this/next year), soonest first
+  const urgentFirst = sort.k === "peak_year_to" && sort.dir > 0;
+  const urgent = (w) => urgentFirst && w.stock > 0 && (status(w) === "now" || (status(w) !== "over" && w.peak_year_to != null && w.peak_year_to <= Y + 1));
+  const urgency = (a, b) => (urgent(b) - urgent(a)) || (urgent(a) && urgent(b)
+    ? Math.min(a.peak_year_to ?? 9999, a.drink_year_to ?? 9999) - Math.min(b.peak_year_to ?? 9999, b.drink_year_to ?? 9999) : 0);
+  const rows = filtered().sort((a, b) => (noBarcode(b) - noBarcode(a)) || (noBarcode(a) && noBarcode(b) ? newest(a, b) : urgency(a, b) || cmp(a, b)));
   $$("#tbl th").forEach((th) => {
     th.classList.toggle("sorted", th.dataset.k === sort.k);
     th.classList.toggle("desc", th.dataset.k === sort.k && sort.dir < 0);
