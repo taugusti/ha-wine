@@ -1,3 +1,8 @@
+# 1.29.0
+- Saving a wine with a barcode that another wine already has (suppliers sometimes reuse codes across vintages) asks first, and can give the wine its own code (999888777xxx) and print a label for it.
+- Barcode labels (62 × 29 mm, EAN-13 with wine name, vintage and producer): "🏷 Print label" in the wine overview and next to the barcode field.
+- Wines without a barcode are sorted newest created first.
+
 # 1.28.0
 - New wines that were never in stock are always shown in the list ("New · not in stock yet"), even when wines with 0 bottles are hidden.
 - An unknown barcode typed or scanned (USB scanner) in the search field first offers to attach it to a wine without a barcode; otherwise a new wine is created as before.

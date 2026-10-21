@@ -253,9 +253,11 @@ function winCell(w) {
 }
 
 const noBarcode = (w) => !String(w.barcode ?? "").trim();
+const newest = (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")) || b.id - a.id;
 function render() {
-  // wines without a barcode first (they cannot be scanned), then the chosen sort
-  const rows = filtered().sort((a, b) => (noBarcode(b) - noBarcode(a)) || cmp(a, b));
+  // wines without a barcode first (newest created first), then the chosen sort
+  // within those, newest created first
+  const rows = filtered().sort((a, b) => (noBarcode(b) - noBarcode(a)) || (noBarcode(a) && noBarcode(b) ? newest(a, b) : cmp(a, b)));
   $$("#tbl th").forEach((th) => {
     th.classList.toggle("sorted", th.dataset.k === sort.k);
     th.classList.toggle("desc", th.dataset.k === sort.k && sort.dir < 0);
@@ -423,7 +425,7 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
           ${field("list_price", "Value (DKK, normal price)", w, "number")}
           ${field("shop", "Shop", w, "text", "", "dl-shop")}
           ${field("location", "Location", w)}
-          <label class="wide">Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}" inputmode="numeric"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
+          <label class="wide">Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}" inputmode="numeric"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button><button type="button" class="btn" data-printlabel title="Print a barcode label">🏷</button></span></label>
           ${isNew ? field("initial_qty", "Bottles in stock", w, "number") : ""}
           ${field("link", "Link", w, "url", "wide")}
           <input type="hidden" name="photo" value="${esc(w.photo ?? "")}">
@@ -511,6 +513,7 @@ function renderOverview() {
       ${fact("Vintage", w.vintage ?? "")}${fact("Type", esc(w.wine_type || "") + size)}
       ${fact("Grapes", esc(w.grapes || ""))}${fact("Price", price)}
       ${fact("Shop", esc(w.shop || ""))}${fact("Location", esc(w.location || ""))}
+      ${w.barcode ? fact("Barcode", `${esc(w.barcode)} <button type="button" class="btn small-btn" data-printlabel>🏷 Print label</button>`) : ""}
       ${w.link ? fact("Link", `<a href="${esc(w.link)}" target="_blank" rel="noopener">${esc(new URL(w.link, location.href).hostname.replace(/^www\./, ""))}</a>`) : ""}
     </dl>
     ${w.info || w.advice || w.serving || w.window_basis || w.note ? `<div class="ovtext">${txt("About", w.info)}${txt("Drinking", w.advice)}${txt("Serving", w.serving)}${txt("Drinking window based on", w.window_basis)}${txt("Notes", w.note)}</div>` : ""}`;
@@ -823,22 +826,86 @@ function closeDrawer() {
   const d = $("#drawer"); d.classList.remove("open"); d.setAttribute("aria-hidden", "true"); $("#scrim").hidden = true; current = null;
 }
 
+// ---- barcode labels: EAN-13 (or Code 39-free fallback: the digits only) as SVG, printed via a hidden iframe
+const EAN = {
+  L: ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"],
+  G: ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"],
+  R: ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"],
+  P: ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"],
+};
+function ean13Svg(code) {
+  if (!/^\d{13}$/.test(code)) return null;
+  const d = code.split("").map(Number), par = EAN.P[d[0]];
+  let bits = "101";
+  for (let i = 1; i <= 6; i++) bits += EAN[par[i - 1]][d[i]];
+  bits += "01010";
+  for (let i = 7; i <= 12; i++) bits += EAN.R[d[i]];
+  bits += "101";
+  const guard = (i) => i < 3 || (i >= 45 && i < 50) || i >= 92;
+  const q = 9, W = 95 + 2 * q, H = 50;
+  let bars = "";
+  for (let i = 0; i < 95; i++) if (bits[i] === "1") bars += `<rect x="${q + i}" y="0" width="1" height="${guard(i) ? H + 5 : H}"/>`;
+  const t = (x, s) => `<text x="${x}" y="${H + 11}" font-size="9" font-family="monospace" text-anchor="middle">${s}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H + 13}" shape-rendering="crispEdges">${bars}`
+    + t(4, d[0]) + t(q + 3 + 21, code.slice(1, 7)) + t(q + 50 + 21, code.slice(7)) + "</svg>";
+}
+function printLabel(w) {
+  const code = String(w.barcode || "").trim();
+  if (!code) { toast("This wine has no barcode"); return; }
+  const svg = ean13Svg(code) || `<div class="digits">${esc(code)}</div>`;
+  const name = w.description || "";
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Label ${esc(code)}</title><style>
+    @page { size: 62mm 29mm; margin: 0; }
+    html, body { margin: 0; }
+    body { font: 8pt system-ui, sans-serif; }
+    .lab { width: 62mm; height: 29mm; box-sizing: border-box; padding: 1.5mm 3mm; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+    .n { font-weight: 700; font-size: 8pt; line-height: 1.15; max-height: 2.4em; overflow: hidden; }
+    .m { font-size: 7pt; color: #333; }
+    svg { height: 15mm; width: auto; align-self: center; }
+    .digits { font: 700 14pt monospace; text-align: center; }
+  </style></head><body><div class="lab"><div><div class="n">${esc(name)}</div>
+    <div class="m">${[w.vintage, w.producer].filter(Boolean).map(esc).join(" · ")}</div></div>${svg}</div></body></html>`;
+  let fr = $("#printFrame");
+  if (!fr) { fr = document.createElement("iframe"); fr.id = "printFrame"; fr.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0"; document.body.appendChild(fr); }
+  fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch { toast("Printing is not available here"); } };
+  fr.srcdoc = html;
+}
+
 async function saveWine(opt = {}) {
   const g = $("#grapeIn"); if (g && g.value.trim()) { addGrape(g.value); g.value = ""; }
   const f = formData();
   if (!f.description.trim()) { toast("Description is required"); const e = $("#editSec"); if (e) e.open = true; return false; }
   if (!current.id) {
-    const dup = wines.find((w) => fold(w.description).replace(/[^a-z0-9]/g, "") === fold(f.description).replace(/[^a-z0-9]/g, "")
-      || (f.barcode && w.barcode === f.barcode.trim()));
+    const dup = wines.find((w) => fold(w.description).replace(/[^a-z0-9]/g, "") === fold(f.description).replace(/[^a-z0-9]/g, ""));
     if (dup && !confirm(`"${dup.description}" already exists (${dup.stock} in stock). Create a new wine anyway?`)) return false;
+  }
+  // a new or changed barcode that another wine already has (suppliers sometimes reuse codes across vintages)
+  let printAfter = false;
+  const bc = String(f.barcode || "").trim();
+  if (bc && bc !== String(current.barcode || "").trim()) {
+    const others = (await api("api/lookup?barcode=" + encodeURIComponent(bc)).catch(() => [])).filter((x) => x.id !== current.id);
+    if (others.length) {
+      const o = wines.find((w) => w.id === others[0].id) || others[0];
+      const c = await askChoice("Barcode already in use",
+        `${bc} already belongs to "${o.description}"${o.vintage ? ` (${o.vintage})` : ""}. Suppliers sometimes use the same barcode for several vintages. Give this wine its own code and print a label for it?`,
+        [{ label: "Make my own code + print label", value: "own", cls: "primary" }, { label: "Use the same code anyway", value: "same" }, { label: "Cancel", value: null }]);
+      if (!c) return false;
+      if (c === "own") {
+        f.barcode = (await api("api/next-barcode")).barcode;
+        const el = $('#drawer [name="barcode"]'); if (el) el.value = f.barcode;
+        printAfter = true;
+      }
+    }
   }
   try {
     const scroll = $("#drawer").scrollTop;
     if (current.id) {
-      await send(`api/wines/${current.id}`, "PUT", f); toast("Saved"); await refresh();
+      await send(`api/wines/${current.id}`, "PUT", f); toast(printAfter ? `Saved with own code ${f.barcode}` : "Saved"); await refresh();
+      if (printAfter) printLabel({ ...current, ...f });
       if (!opt.close) openWine(current.id, {}, scroll);
     } else {
-      const r = await send("api/wines", "POST", f); toast("Wine created"); await refresh();
+      const r = await send("api/wines", "POST", f); toast(printAfter ? `Wine created with own code ${f.barcode}` : "Wine created"); await refresh();
+      if (printAfter) printLabel(f);
       if (!opt.close) openWine(r.id);
     }
     return true;
@@ -865,6 +932,7 @@ $("#drawer").addEventListener("click", async (e) => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.matches("[data-close]")) requestClose();
   else if (t.dataset.editbc != null) { const e = $("#editSec"); if (e) { e.open = true; const f = $('#drawer [name="barcode"]'); f?.scrollIntoView({ block: "center" }); f?.focus(); } }
+  else if (t.dataset.printlabel != null) printLabel({ ...current, ...formData() });
   else if (t.id === "saveW" || t.id === "saveW2") saveWine();
   else if (t.id === "discardW") { if (current.id) openWine(current.id, {}, $("#drawer").scrollTop); else closeDrawer(); }
   else if (t.dataset.step) { const q = $("#mvQty"); q.value = Math.max(0, (parseInt(q.value, 10) || 0) + Number(t.dataset.step)); }
@@ -951,7 +1019,7 @@ async function scanned(code) {
   else {
     // unknown code: it may belong to a wine that has no barcode yet (e.g. created on the phone)
     const cands = wines.filter((w) => noBarcode(w) && !w.archived)
-      .sort((a, b) => (!a.last_move === !b.last_move ? b.id - a.id : a.last_move ? 1 : -1)).slice(0, 8);
+      .sort(newest).slice(0, 8);
     if (cands.length) {
       const c = await askChoice("Unknown barcode", `${code} is not in the cellar yet. Does it belong to one of these wines without a barcode?`,
         [...cands.map((w) => ({ label: w.description + (w.last_move ? "" : " (new)"), value: w.id })),

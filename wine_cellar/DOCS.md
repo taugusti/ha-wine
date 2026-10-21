@@ -131,7 +131,13 @@ Wines without a barcode are listed first with a **!** marker. Open one and tap *
 code or make your own. If you type or scan (USB scanner) an unknown barcode in the search field, the app first asks
 whether it belongs to one of the wines without a barcode, and saves it there.
 
-New wines that were never in stock always show in the list, marked "New · not in stock yet".
+New wines that were never in stock always show in the list, marked "New · not in stock yet". Wines without a
+barcode are sorted with the newest created first.
+
+When you save a barcode that another wine already has (suppliers sometimes use the same code for several vintages),
+the app asks first. **Make my own code + print label** gives the wine the next code in your own series and prints a
+label for the bottle. **🏷 Print label** in the wine overview (and next to the barcode field) prints a 62 × 29 mm label
+with the EAN-13 barcode, wine name, vintage and producer; pick your label printer and paper size in the print dialog.
 
 ## Home Assistant sensors
 
