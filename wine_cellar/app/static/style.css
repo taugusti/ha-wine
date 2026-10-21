@@ -523,3 +523,15 @@ ul.rich.opts li.warn, ul.rich.opts li.linkok { font-size: 13px; }
 ul.dropped { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; color: var(--text); }
 ul.dropped li { padding-left: 10px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 ul.dropped s { color: var(--muted); }
+
+/* 1.26: wines without barcode, barcode scanning in the wine form */
+.nobc { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--now); color: #fff; font: 700 12px/1 var(--sans); margin-right: 6px; vertical-align: 1px; flex: none; }
+.nobc-sum { color: var(--now); white-space: nowrap; }
+.nobc-sum .nobc { width: 15px; height: 15px; font-size: 10px; margin-right: 4px; }
+.bcwarn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--now); background: color-mix(in srgb, var(--now) 10%, transparent); font-size: 14px; }
+.bcwarn > span:nth-child(2) { flex: 1; min-width: 160px; }
+.inline > .scanbtn { flex: none; }
+.bcin { flex: 1; min-width: 180px; }
+.bcin input { flex: 1; min-width: 0; }

@@ -130,6 +130,10 @@ The barcode button next to the search field scans with the phone camera (also in
 app needs camera permission, and the page must be opened over https, e.g. via Nabu Casa). A scanned wine opens in
 **check-out mode**: the stock is shown first, and **Out** takes the bottle out and closes the wine.
 
+Wines without a barcode are listed first with a **!** marker. Open one and tap **Scan barcode** to scan and save its
+code, or use the scan button next to the barcode field when you create or edit a wine. A code that already belongs to
+another wine is flagged before it is used.
+
 ## Home Assistant sensors
 
 The app keeps these sensors updated:

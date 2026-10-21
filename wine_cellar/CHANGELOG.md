@@ -1,3 +1,8 @@
+# 1.26.0
+- Wines without a barcode are listed first with a "!" marker, and the summary shows how many there are.
+- A wine without a barcode shows a "Scan barcode" button at the top; the scanned code is saved right away.
+- Camera barcode scanning in the wine form (next to the barcode field and in Smart fill). A code already used by another wine is flagged. For a new wine with nothing else entered, the barcode lookup starts automatically.
+
 # 1.25.1
 - Offers: the search agent no longer gives up when it cannot find 4-6 wines that match everything: it may return fewer, and the peak only has to overlap the gap years (its own estimate is fine).
 
