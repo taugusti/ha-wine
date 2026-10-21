@@ -16,8 +16,6 @@ function clientLog(kind, msg, extra = {}) {
 }
 window.addEventListener("error", (e) => clientLog("error", e.message, { src: `${e.filename}:${e.lineno}:${e.colno}`, stack: e.error?.stack?.slice(0, 800) }));
 window.addEventListener("unhandledrejection", (e) => clientLog("rejection", e.reason?.message || e.reason, { stack: e.reason?.stack?.slice(0, 800) }));
-const SCAN_OK = !!(navigator.mediaDevices?.getUserMedia && window.isSecureContext);
-const SCAN_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>';
 const today = () => new Date().toISOString().slice(0, 10);
 
 // 1.23: descriptive text as easy-to-read points. "- Label: text" lines become a list with bold labels;
@@ -402,7 +400,7 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
         ${tips("Photo of the front label: the lookup starts by itself", "Back label (grapes, barcode) improves it", "Invoice text and barcode are optional", isNew ? "" : "Without photo or text, the current description is used", "You choose which suggestions to apply")}
         <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
         <div class="row">
-          <span class="inline bcin"><input type="text" id="aiBarcode" placeholder="Barcode" inputmode="numeric" value="${esc(w.barcode ?? "")}">${SCAN_OK ? `<button type="button" class="btn icon scanbtn" data-scanbc="form" title="Scan the barcode with the camera" aria-label="Scan barcode">${SCAN_ICON}</button>` : ""}</span>
+          <input type="text" id="aiBarcode" placeholder="Barcode" inputmode="numeric" value="${esc(w.barcode ?? "")}">
           <button type="button" class="btn primary" id="aiGo">Look up</button>
           <span class="muted small" id="aiStatus"></span>
         </div>
@@ -425,7 +423,7 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
           ${field("list_price", "Value (DKK, normal price)", w, "number")}
           ${field("shop", "Shop", w, "text", "", "dl-shop")}
           ${field("location", "Location", w)}
-          <label class="wide">Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}" inputmode="numeric">${SCAN_OK ? `<button type="button" class="btn icon scanbtn" data-scanbc="form" title="Scan the barcode with the camera" aria-label="Scan barcode">${SCAN_ICON}</button>` : ""}<button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
+          <label class="wide">Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}" inputmode="numeric"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
           ${isNew ? field("initial_qty", "Bottles in stock", w, "number") : ""}
           ${field("link", "Link", w, "url", "wide")}
           <input type="hidden" name="photo" value="${esc(w.photo ?? "")}">
@@ -482,15 +480,6 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
   if (!isNew) renderOverview();
   snapshotForm(); updateDirty();
   if (keepScroll) d.scrollTop = keepScroll;
-  if (opts.checkout && !isNew) {   // opened by scanning a bottle: go straight to taking it out
-    const sc = $("#drawer .stockc");
-    sc.classList.add("checkout"); current.checkout = true;
-    sc.insertAdjacentHTML("afterbegin", w.stock > 0 ? '<div class="cohint">Scanned. Tap <b>Out</b> to take a bottle out of the cellar.</div>'
-      : '<div class="cohint warn">Scanned, but there are no bottles of this wine in stock.</div>');
-    $("#ov").before(sc);   // stock first, right under the name
-    d.scrollTop = 0;
-    $("#drawer [data-mv=out]").focus({ preventScroll: true });
-  }
   $("#wf").addEventListener("submit", (e) => e.preventDefault());
   if (isNew && preset.barcode) $("#aiText")?.focus();
 }
@@ -514,9 +503,8 @@ function renderOverview() {
       return /^https?:/.test(u || "") ? `<a class="crit" href="${esc(u)}" target="_blank" rel="noopener" title="Open the review">${inner}</a>` : `<div class="crit">${inner}</div>`;
     }).join("")}</div>`
     : `<p class="small muted nocrit">No critic scores yet · <a href="https://www.wine-searcher.com/find/${encodeURIComponent(searchName(w).replace(/\s+/g, "+"))}" target="_blank" rel="noopener">find on Wine-Searcher</a></p>`;
-  const bcWarn = noBarcode(w) ? `<div class="bcwarn"><span class="nobc">!</span><span>No barcode yet, so this wine cannot be scanned.</span>
-      ${SCAN_OK ? '<button type="button" class="btn primary" data-scanbc="save">Scan barcode</button>' : ""}
-      <button type="button" class="btn" data-editbc>Enter or make one</button></div>` : "";
+  const bcWarn = noBarcode(w) ? `<div class="bcwarn"><span class="nobc">!</span><span>No barcode yet.</span>
+      <button type="button" class="btn primary" data-editbc>Enter or make one</button></div>` : "";
   el.innerHTML = `${bcWarn}${winCell(w).replace('class="win', 'class="win big')}
     ${critStrip}
     <dl class="facts">
@@ -862,10 +850,6 @@ async function move(kind) {
   if (!Number.isFinite(n) || n < 0 || (kind !== "count" && n === 0)) { toast("Enter a valid quantity"); return; }
   try {
     const r = await send("api/movements", "POST", { wine_id: current.id, kind, qty: n, count: n, date: $("#mvDate").value });
-    if (current.checkout && kind === "out" && !isDirty()) {   // scanned bottle taken out: done
-      toast(`${n === 1 ? "1 bottle" : n + " bottles"} out · ${r.stock} left of ${current.description}`);
-      closeDrawer(); await refresh(); return;
-    }
     toast(`${KIND[kind]} recorded, stock: ${r.stock}`);
     await refresh(); reopenKeepingEdits();
   } catch (e) { toast("Error: " + e.message); }
@@ -880,7 +864,6 @@ function reopenKeepingEdits() {
 $("#drawer").addEventListener("click", async (e) => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.matches("[data-close]")) requestClose();
-  else if (t.dataset.scanbc) { const mode = t.dataset.scanbc; openScanner((code) => useScannedBarcode(code, mode), "Scan the barcode on the bottle"); }
   else if (t.dataset.editbc != null) { const e = $("#editSec"); if (e) { e.open = true; const f = $('#drawer [name="barcode"]'); f?.scrollIntoView({ block: "center" }); f?.focus(); } }
   else if (t.id === "saveW" || t.id === "saveW2") saveWine();
   else if (t.id === "discardW") { if (current.id) openWine(current.id, {}, $("#drawer").scrollTop); else closeDrawer(); }
@@ -944,7 +927,7 @@ $("#drawer").addEventListener("input", (e) => {
   clearTimeout(renderEst.t); renderEst.t = setTimeout(() => { renderEst(); scoreLinks(); }, 300);
 });
 $("#scrim").addEventListener("click", () => requestClose());
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && $("#pcam").hidden && $("#cam").hidden && !askOpen() && !filterOpen()) requestClose(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current && $("#pcam").hidden && !askOpen() && !filterOpen()) requestClose(); });
 
 // ------------------------------------------------------------- search, sort, scan
 $("#tbl thead").addEventListener("click", (e) => {
@@ -960,131 +943,12 @@ $("#q").addEventListener("keydown", (e) => {
   if (/^\d{6,14}$/.test(v)) { e.preventDefault(); scanned(v); }
 });
 
-async function scanned(code, fromCamera = false) {
+async function scanned(code) {
   const hits = await api("api/lookup?barcode=" + encodeURIComponent(code));
   $("#q").value = ""; render();
-  if (hits.length === 1) openWine(hits[0].id, {}, 0, { checkout: fromCamera });
+  if (hits.length === 1) openWine(hits[0].id);
   else if (hits.length > 1) { $("#q").value = code; setFilter({ all: true }); toast(`${hits.length} wines share this barcode`); }
   else { toast("Unknown barcode, creating a new wine"); openWine(null, { barcode: code }); }
-}
-
-// ---- camera barcode scanner: the browser's BarcodeDetector when it has one, otherwise ZXing (loaded on first use)
-const ZXING_SRC = ["wc/vendor/zxing.min.js", "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"];
-async function loadZXing() {
-  for (const src of ZXING_SRC) {
-    if (window.ZXing) break;
-    try {
-      await new Promise((ok, bad) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = bad; document.head.appendChild(el); });
-    } catch { /* try the next source */ }
-  }
-  if (!window.ZXing) throw new Error("the barcode reader could not be loaded");
-  return window.ZXing;
-}
-const validEan = (c) => {
-  if (!/^\d{8}$|^\d{12,13}$/.test(c)) return /^[\w-]{4,}$/.test(c);   // code 128 etc.: accept as read
-  const d = c.padStart(13, "0").split("").map(Number);
-  const sum = d.slice(0, 12).reduce((s, x, i) => s + x * (i % 2 ? 3 : 1), 0);
-  return (10 - (sum % 10)) % 10 === d[12];
-};
-let scanDetect = null, scanNative = false;
-async function makeDetector() {
-  if (scanDetect) return scanDetect;
-  const want = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
-  if ("BarcodeDetector" in window) {
-    try {
-      const have = await BarcodeDetector.getSupportedFormats();
-      const fm = want.filter((f) => have.includes(f));
-      if (fm.includes("ean_13")) {
-        const det = new BarcodeDetector({ formats: fm }); scanNative = true;
-        return (scanDetect = async (v) => (await det.detect(v).catch(() => []))[0]?.rawValue || null);
-      }
-    } catch { /* fall back to ZXing */ }
-  }
-  const Z = await loadZXing();
-  const hints = new Map();
-  hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128]);
-  hints.set(Z.DecodeHintType.TRY_HARDER, true);
-  const reader = new Z.MultiFormatReader(); reader.setHints(hints);
-  const cv = document.createElement("canvas"), ctx = cv.getContext("2d", { willReadFrequently: true });
-  return (scanDetect = async (v) => {
-    if (!v.videoWidth) return null;
-    // the middle band of the picture, where the frame is shown
-    const sw = v.videoWidth * 0.8, sh = Math.min(v.videoHeight * 0.45, sw * 0.6), k = Math.min(1, 800 / sw);
-    cv.width = Math.round(sw * k); cv.height = Math.round(sh * k);
-    ctx.drawImage(v, (v.videoWidth - sw) / 2, (v.videoHeight - sh) / 2, sw, sh, 0, 0, cv.width, cv.height);
-    try { return reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)))).getText(); }
-    catch { return null; }
-  });
-}
-
-// one scanner for the search field and the wine form: openScanner(callback) calls back with a checked code
-let scanCb = null;
-if (SCAN_OK) {
-  $("#camBtn").hidden = false;
-  let stream = null, timer = null, last = null, busy = false;
-  const stop = () => { clearTimeout(timer); timer = null; stream?.getTracks().forEach((t) => t.stop()); stream = null; $("#cam").hidden = true; };
-  const tick = async () => {
-    if (!stream) return;
-    if (!busy) {
-      busy = true;
-      const code = await scanDetect($("#camVideo")).catch(() => null);
-      busy = false;
-      if (code && validEan(code)) {
-        // ZXing can misread a digit now and then: wait for the same code twice
-        if (scanNative || code === last) {
-          stop(); navigator.vibrate?.(80); const cb = scanCb; scanCb = null; cb?.(code); return;
-        }
-        last = code;
-      }
-    }
-    timer = setTimeout(tick, 150);
-  };
-  window.openScanner = async (cb, hint = "Point the camera at the barcode") => {
-    scanCb = cb; $("#scanHint").textContent = hint; last = null;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-      const v = $("#camVideo"); v.srcObject = stream; $("#cam").hidden = false;
-      try { await v.play(); } catch { /* autoplay */ }
-      const track = stream.getVideoTracks()[0];
-      $("#camTorch").hidden = !track.getCapabilities?.().torch;
-      try { await makeDetector(); } catch (e) { stop(); toast("Scanner not available: " + e.message + ". Type the barcode instead."); return; }
-      tick();
-    } catch (e) { stop(); toast("Camera not available: " + e.message); }
-  };
-  window.scannerOpen = () => !$("#cam").hidden;
-  $("#camBtn").addEventListener("click", () => openScanner((code) => scanned(code, true)));
-  $("#camTorch").addEventListener("click", async () => {
-    const track = stream?.getVideoTracks()[0]; if (!track) return;
-    const on = !$("#camTorch").classList.contains("on");
-    try { await track.applyConstraints({ advanced: [{ torch: on }] }); $("#camTorch").classList.toggle("on", on); } catch { /* no torch */ }
-  });
-  $("#camClose").addEventListener("click", () => { scanCb = null; stop(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#cam").hidden) { e.stopImmediatePropagation(); scanCb = null; stop(); } }, true);
-}
-
-// scanned in the wine form / overview: check that no other wine has the code, then use it
-async function useScannedBarcode(code, mode) {
-  if (!current) return;
-  const others = (await api("api/lookup?barcode=" + encodeURIComponent(code)).catch(() => [])).filter((x) => x.id !== current.id);
-  if (others.length) {
-    const c = await askChoice("Barcode already in use", `${code} belongs to "${others[0].description}".`,
-      [{ label: "Open that wine", value: "open", cls: "primary" }, { label: "Use it here anyway", value: "use" }, { label: "Cancel", value: null }]);
-    if (c === "open") { if (!isDirty() || (await askChoice("Discard changes?", "This wine has unsaved changes.", [{ label: "Discard", value: true, cls: "danger" }, { label: "Keep editing", value: null }]))) openWine(others[0].id); return; }
-    if (c !== "use") return;
-  }
-  if (mode === "save" && current.id) {   // from the overview: save right away
-    try {
-      await send(`api/wines/${current.id}`, "PUT", { barcode: code });
-      toast(`Barcode ${code} saved`); await refresh(); openWine(current.id, {}, $("#drawer").scrollTop);
-    } catch (e) { toast("Error: " + e.message); }
-    return;
-  }
-  const f = $('#drawer [name="barcode"]'); if (f) f.value = code;
-  const a = $("#aiBarcode"); if (a) a.value = code;
-  updateDirty();
-  toast(`Barcode ${code} filled in${current.id ? " · save to keep it" : ""}`);
-  // a new wine with nothing else to go on yet: look the barcode up right away
-  if (!current.id && aiEntity && !aiJob && !aiPhotos.front && !aiPhotos.back && !$("#aiText")?.value.trim() && !$('#drawer [name="description"]').value.trim()) aiLookup();
 }
 
 $("#newWine").addEventListener("click", () => openWine(null));
@@ -1535,7 +1399,6 @@ api("api/session").then((s) => {
 const LAYERS = [   // top first
   { open: () => !$("#ask").hidden, close: () => $("#ask").click() },          // a click on the backdrop dismisses it
   { open: () => !$("#pcam").hidden, close: () => closePhotoCamera() },
-  { open: () => !$("#cam").hidden, close: () => $("#camClose").click() },
   { open: () => filterOpen(), close: () => closeFilter() },
   { open: () => $("#drawer").classList.contains("open"), close: () => requestClose() },
 ];
@@ -1556,7 +1419,7 @@ function initHistory() {
     queued = true;
     setTimeout(() => { queued = false; syncHistory(); }, 0);
   });
-  ["#ask", "#pcam", "#cam", "#fSheet", "#drawer"].forEach((id) => mo.observe($(id), { attributes: true, attributeFilter: ["hidden", "class"] }));
+  ["#ask", "#pcam", "#fSheet", "#drawer"].forEach((id) => mo.observe($(id), { attributes: true, attributeFilter: ["hidden", "class"] }));
   window.addEventListener("popstate", (e) => {
     const st = e.state;
     if (ownBacks > 0) { ownBacks--; syncHistory(); return; }

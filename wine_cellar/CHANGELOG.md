@@ -1,3 +1,6 @@
+# 1.27.0
+- Camera barcode scanning removed everywhere (search field, wine form, check-out mode). Barcodes can still be typed or entered with a USB scanner. Wines without a barcode are still listed first with a "!".
+
 # 1.26.0
 - Wines without a barcode are listed first with a "!" marker, and the summary shows how many there are.
 - A wine without a barcode shows a "Scan barcode" button at the top; the scanned code is saved right away.

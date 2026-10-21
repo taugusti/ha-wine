@@ -26,7 +26,7 @@ When you create a wine, press **Front label** under **Smart fill** and take a ph
 Press **Back label** to add the back label (grapes, barcode); the lookup is then updated.
 The buttons open a camera view inside the app. This needs a secure (https) connection, e.g. via Nabu Casa;
 on a plain http connection, or if camera access is refused, the photo picker opens instead.
-"Or choose from gallery" lets you use an existing photo. You can also paste invoice text and/or scan the barcode, alone or together
+"Or choose from gallery" lets you use an existing photo. You can also paste invoice text and/or enter the barcode, alone or together
 with the photos. The app:
 
 1. looks the barcode up in Open Food Facts (free, often unknown for wine),
@@ -124,15 +124,11 @@ dashed band, until a real peak is set by **✨ Update with AI** or by hand.
 
 ## Barcodes
 
-Type or scan a barcode in the search field and press Enter. A USB scanner works too. Known wines open directly,
+Type a barcode in the search field and press Enter. A USB scanner works too. Known wines open directly,
 and unknown barcodes start a new wine. **New code** continues your own EAN-13 series (999888777xxx + check digit).
-The barcode button next to the search field scans with the phone camera (also in the Home Assistant app; the
-app needs camera permission, and the page must be opened over https, e.g. via Nabu Casa). A scanned wine opens in
-**check-out mode**: the stock is shown first, and **Out** takes the bottle out and closes the wine.
 
-Wines without a barcode are listed first with a **!** marker. Open one and tap **Scan barcode** to scan and save its
-code, or use the scan button next to the barcode field when you create or edit a wine. A code that already belongs to
-another wine is flagged before it is used.
+Wines without a barcode are listed first with a **!** marker. Open one and tap **Enter or make one** to type its
+code or make your own.
 
 ## Home Assistant sensors
 

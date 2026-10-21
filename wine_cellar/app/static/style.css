@@ -159,8 +159,6 @@ table.flow td, table.flow th { padding: 6px 10px; cursor: default; }
 .ok { color: var(--ready); } .warn { color: var(--now); } .err { color: var(--over); }
 
 /* camera + toast */
-.cam { position: fixed; inset: 0; background: #000; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
-.cam video { max-width: 100%; max-height: 80vh; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 30px); opacity: 0; background: var(--text); color: var(--bg);
   padding: 10px 16px; border-radius: 10px; transition: all .2s; z-index: 30; pointer-events: none; max-width: 90vw; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -374,22 +372,6 @@ a.btn { text-decoration: none; }
 .tabs button { white-space: nowrap; flex: none; }
 @media (max-width: 560px) { .tabs { scrollbar-width: none; } .tabs button { padding: 8px 10px; } }
 
-/* 1.16: camera barcode scanner + checkout */
-.cam { justify-content: center; gap: 0; }
-.cam video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; }
-.scanframe { position: relative; width: min(80vw, 420px); aspect-ratio: 5 / 3; border-radius: 14px;
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); border: 2px solid rgba(255, 255, 255, .9); }
-.scanframe span { position: absolute; left: 8%; right: 8%; top: 50%; height: 2px; background: #ff5a5a; box-shadow: 0 0 8px #ff5a5a;
-  animation: scanline 1.6s ease-in-out infinite alternate; }
-@keyframes scanline { from { top: 15%; } to { top: 85%; } }
-.scanhint { position: relative; color: #fff; margin-top: 18px; font-size: 15px; text-shadow: 0 1px 3px #000; }
-.scanbar { position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom)); display: flex; justify-content: center; gap: 12px; }
-.scanbar .btn { min-width: 110px; min-height: 44px; background: rgba(255, 255, 255, .92); color: #222; border: 0; }
-#camTorch.on { background: #ffd54a; }
-.scanbtn { padding: 6px 10px; }
-.stockc.checkout { border: 2px solid var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
-.cohint { font-size: 14px; margin-bottom: 10px; }
-.stockc.checkout [data-mv=out] { min-width: 90px; font-size: 16px; }
 
 /* login page (direct access) */
 .loginbody { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
@@ -524,7 +506,7 @@ ul.dropped { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-
 ul.dropped li { padding-left: 10px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 ul.dropped s { color: var(--muted); }
 
-/* 1.26: wines without barcode, barcode scanning in the wine form */
+/* 1.26: wines without barcode */
 .nobc { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%;
   background: var(--now); color: #fff; font: 700 12px/1 var(--sans); margin-right: 6px; vertical-align: 1px; flex: none; }
 .nobc-sum { color: var(--now); white-space: nowrap; }
@@ -532,6 +514,4 @@ ul.dropped s { color: var(--muted); }
 .bcwarn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 10px;
   border: 1px solid var(--now); background: color-mix(in srgb, var(--now) 10%, transparent); font-size: 14px; }
 .bcwarn > span:nth-child(2) { flex: 1; min-width: 160px; }
-.inline > .scanbtn { flex: none; }
-.bcin { flex: 1; min-width: 180px; }
-.bcin input { flex: 1; min-width: 0; }
+.inline > 
