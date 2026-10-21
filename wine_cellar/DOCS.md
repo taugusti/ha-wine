@@ -128,7 +128,10 @@ Type a barcode in the search field and press Enter. A USB scanner works too. Kno
 and unknown barcodes start a new wine. **New code** continues your own EAN-13 series (999888777xxx + check digit).
 
 Wines without a barcode are listed first with a **!** marker. Open one and tap **Enter or make one** to type its
-code or make your own.
+code or make your own. If you type or scan (USB scanner) an unknown barcode in the search field, the app first asks
+whether it belongs to one of the wines without a barcode, and saves it there.
+
+New wines that were never in stock always show in the list, marked "New · not in stock yet".
 
 ## Home Assistant sensors
 

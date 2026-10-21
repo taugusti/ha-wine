@@ -514,4 +514,8 @@ ul.dropped s { color: var(--muted); }
 .bcwarn { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 10px;
   border: 1px solid var(--now); background: color-mix(in srgb, var(--now) 10%, transparent); font-size: 14px; }
 .bcwarn > span:nth-child(2) { flex: 1; min-width: 160px; }
-.inline > 
+.inline > .newtag { color: var(--now); border-color: var(--now); margin-left: 0; }
+.askbtns.many { flex-direction: column; align-items: stretch; }
+.askbtns.many .btn { justify-content: flex-start; text-align: left; white-space: normal; }
+.askbtns.many .btn.primary { justify-content: center; }
+.askbox:has(.many) { width: min(460px, 100%); max-height: 90vh; overflow-y: auto; }

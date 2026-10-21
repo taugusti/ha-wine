@@ -108,7 +108,7 @@ const priceOf = (w) => flt.basis === "paid" ? w.purchase_price : (w.list_price ?
 const num = (v) => v === "" || v == null ? null : Number(v);
 
 function matches(w, f = flt, terms = []) {
-  if (!f.all && !(w.stock > 0)) return false;
+  if (!f.all && !(w.stock > 0) && w.last_move) return false;   // new wines that were never in stock stay visible
   if (w.archived && !f.all) return false;
   if (f.country && fold(w.country) !== fold(f.country)) return false;
   if (f.region && !fold(w.region).includes(fold(f.region).trim())) return false;
@@ -261,7 +261,7 @@ function render() {
     th.classList.toggle("desc", th.dataset.k === sort.k && sort.dir < 0);
   });
   $("#tbl tbody").innerHTML = rows.map((w) => `<tr data-id="${w.id}" class="${w.stock > 0 ? "" : "empty"}">
-    <td class="c-name"><div class="wname">${noBarcode(w) ? '<span class="nobc" title="No barcode: open the wine and scan or enter one">!</span>' : ""}${esc(w.description)}</div><div class="sub">${esc(w.producer || "")}${w.location ? " · " + esc(w.location) : ""}${scoreBadges(w)}</div></td>
+    <td class="c-name"><div class="wname">${noBarcode(w) ? '<span class="nobc" title="No barcode: open the wine and scan or enter one">!</span>' : ""}${esc(w.description)}</div><div class="sub">${!w.last_move ? '<span class="tag newtag">New · not in stock yet</span> ' : ""}${esc(w.producer || "")}${w.location ? " · " + esc(w.location) : ""}${scoreBadges(w)}</div></td>
     <td class="num c-vint">${w.vintage ?? ""}</td>
     <td class="c-region"><div>${esc(w.region || "")}</div><div class="sub">${esc(w.country || "")}</div></td>
     <td class="c-grapes hide-md sub">${esc(w.grapes || "")}</td>
@@ -526,7 +526,7 @@ function askChoice(title, text, choices) {
   return new Promise((resolve) => {
     const dlg = $("#ask");
     dlg.innerHTML = `<div class="askbox" role="dialog" aria-modal="true"><h3>${esc(title)}</h3><p>${esc(text)}</p>
-      <div class="askbtns">${choices.map((c, i) => `<button type="button" class="btn ${c.cls || ""}" data-i="${i}">${esc(c.label)}</button>`).join("")}</div></div>`;
+      <div class="askbtns ${choices.length > 3 ? "many" : ""}">${choices.map((c, i) => `<button type="button" class="btn ${c.cls || ""}" data-i="${i}">${esc(c.label)}</button>`).join("")}</div></div>`;
     dlg.hidden = false;
     const done = (v) => { dlg.hidden = true; dlg.innerHTML = ""; dlg.onclick = null; document.removeEventListener("keydown", esc_); resolve(v); };
     const esc_ = (e) => { if (e.key === "Escape") { e.stopPropagation(); done(null); } };
@@ -948,7 +948,23 @@ async function scanned(code) {
   $("#q").value = ""; render();
   if (hits.length === 1) openWine(hits[0].id);
   else if (hits.length > 1) { $("#q").value = code; setFilter({ all: true }); toast(`${hits.length} wines share this barcode`); }
-  else { toast("Unknown barcode, creating a new wine"); openWine(null, { barcode: code }); }
+  else {
+    // unknown code: it may belong to a wine that has no barcode yet (e.g. created on the phone)
+    const cands = wines.filter((w) => noBarcode(w) && !w.archived)
+      .sort((a, b) => (!a.last_move === !b.last_move ? b.id - a.id : a.last_move ? 1 : -1)).slice(0, 8);
+    if (cands.length) {
+      const c = await askChoice("Unknown barcode", `${code} is not in the cellar yet. Does it belong to one of these wines without a barcode?`,
+        [...cands.map((w) => ({ label: w.description + (w.last_move ? "" : " (new)"), value: w.id })),
+         { label: "No, create a new wine", value: "new", cls: "primary" }, { label: "Cancel", value: null }]);
+      if (!c) return;
+      if (c !== "new") {
+        try { await send(`api/wines/${c}`, "PUT", { barcode: code }); toast(`Barcode saved`); await refresh(); openWine(c); }
+        catch (e) { toast("Error: " + e.message); }
+        return;
+      }
+    }
+    toast("Unknown barcode, creating a new wine"); openWine(null, { barcode: code });
+  }
 }
 
 $("#newWine").addEventListener("click", () => openWine(null));

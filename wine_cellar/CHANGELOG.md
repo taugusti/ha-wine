@@ -1,3 +1,7 @@
+# 1.28.0
+- New wines that were never in stock are always shown in the list ("New · not in stock yet"), even when wines with 0 bottles are hidden.
+- An unknown barcode typed or scanned (USB scanner) in the search field first offers to attach it to a wine without a barcode; otherwise a new wine is created as before.
+
 # 1.27.0
 - Camera barcode scanning removed everywhere (search field, wine form, check-out mode). Barcodes can still be typed or entered with a USB scanner. Wines without a barcode are still listed first with a "!".
 
