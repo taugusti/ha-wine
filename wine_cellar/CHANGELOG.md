@@ -1,3 +1,6 @@
+# 1.30.0
+- No more distinction between Excel and app wines: wines without any stock history get a placeholder stock count of 0 bottles dated 2022-01-01 (once for existing wines, and on every Excel import). Only wines created in the app and never stocked show as "New · not in stock yet".
+
 # 1.29.2
 - Fix: only wines created in the app that were never in stock count as "New · not in stock yet". Excel-imported wines with 0 bottles are hidden again when "Show wines with 0 bottles" is off.
 

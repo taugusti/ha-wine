@@ -8,6 +8,7 @@ Safe to run repeatedly:
 
 Note: the workbook's sheet and column names are Danish and are matched as-is.
 """
+import db
 import io
 import re
 from datetime import datetime, date
@@ -218,6 +219,8 @@ def run_import(con, data, dry_run=False, drop_app=False):
                         (wid, m["barcode"], m["date"], m["qty"], m["kind"], m["count_value"], m["note"], ts))
             summary["moves_imported"] += 1
         summary["orphan_barcodes"] = sorted(orphans)
+        # wines from the file without any movement get a placeholder (excel source: replaced on the next import)
+        db.add_placeholder_moves(con, {key_to_id[w["import_key"]] for w in wines}, source="excel")
 
         # check: stock in the app vs. the Excel column 'Lager'
         for w in wines:

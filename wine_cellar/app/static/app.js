@@ -253,8 +253,8 @@ function winCell(w) {
 }
 
 const noBarcode = (w) => !String(w.barcode ?? "").trim();
-// created in the app (Excel-imported wines have an import key) and never had a stock movement
-const isNewWine = (w) => !w.import_key && !w.last_move;
+// never had a stock movement (wines from before get a placeholder stock count in 2022)
+const isNewWine = (w) => !w.last_move;
 const newest = (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")) || b.id - a.id;
 function render() {
   // wines without a barcode first (newest created first), then the chosen sort

@@ -646,7 +646,7 @@ class DirectServer(ThreadingHTTPServer):
 
 
 def main():
-    db.con()
+    db.migrate_placeholders(db.con())
     threading.Thread(target=ha_push_loop, daemon=True).start()
     changed()
     print(f"Wine Cellar running on port {PORT} (ingress) and {DIRECT_PORT} (direct, login), database: {db.DB_PATH}",

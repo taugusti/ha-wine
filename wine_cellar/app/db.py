@@ -102,3 +102,31 @@ def con():
 
 def lock():
     return _lock
+
+
+PLACEHOLDER_DATE = "2022-01-01"
+PLACEHOLDER_NOTE = "No stock history (placeholder)"
+
+
+def add_placeholder_moves(con, wine_ids=None, source="app"):
+    """Give wines without any stock movement a 0-bottle stock count dated 2022-01-01, so they count as 'registered'
+    (only wines created in the app and never stocked should show as new). Returns the number added."""
+    q = "SELECT id, barcode FROM wine w WHERE NOT EXISTS (SELECT 1 FROM movement m WHERE m.wine_id = w.id)"
+    rows = con.execute(q).fetchall()
+    if wine_ids is not None:
+        rows = [r for r in rows if r[0] in wine_ids]
+    for wid, bc in rows:
+        con.execute("INSERT INTO movement (wine_id, barcode, date, qty, kind, count_value, note, source, created_at)"
+                    " VALUES (?,?,?,0,'count',0,?,?,?)", (wid, bc, PLACEHOLDER_DATE, PLACEHOLDER_NOTE, source, now()))
+    return len(rows)
+
+
+def migrate_placeholders(con):
+    """One-time: existing wines without movements (from Excel) get a placeholder."""
+    if con.execute("SELECT 1 FROM meta WHERE key='placeholder_moves_done'").fetchone():
+        return 0
+    n = add_placeholder_moves(con)
+    con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('placeholder_moves_done', ?)", (now(),))
+    if n:
+        print(f"Added a placeholder stock count to {n} wines without stock history", flush=True)
+    return n
