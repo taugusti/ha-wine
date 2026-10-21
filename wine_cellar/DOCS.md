@@ -135,9 +135,8 @@ New wines that were never in stock always show in the list, marked "New · not i
 barcode are sorted with the newest created first.
 
 When you save a barcode that another wine already has (suppliers sometimes use the same code for several vintages),
-the app asks first. **Make my own code + print label** gives the wine the next code in your own series and prints a
-label for the bottle. **🏷 Print label** in the wine overview (and next to the barcode field) prints a 62 × 29 mm label
-with the EAN-13 barcode, wine name, vintage and producer; pick your label printer and paper size in the print dialog.
+the app asks first. **Make my own code** gives the wine the next code in your own series (999888777xxx); the code
+is shown under Barcode in the wine overview, so you can print a label for the bottle with your label app.
 
 ## Home Assistant sensors
 

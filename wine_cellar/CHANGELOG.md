@@ -1,3 +1,6 @@
+# 1.29.1
+- Label printing removed (labels are printed with a separate app on the phone). The duplicate barcode check still offers "Make my own code", and the code is shown under Barcode in the wine overview.
+
 # 1.29.0
 - Saving a wine with a barcode that another wine already has (suppliers sometimes reuse codes across vintages) asks first, and can give the wine its own code (999888777xxx) and print a label for it.
 - Barcode labels (62 × 29 mm, EAN-13 with wine name, vintage and producer): "🏷 Print label" in the wine overview and next to the barcode field.
