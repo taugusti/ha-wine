@@ -1,3 +1,6 @@
+# 1.29.2
+- Fix: only wines created in the app that were never in stock count as "New · not in stock yet". Excel-imported wines with 0 bottles are hidden again when "Show wines with 0 bottles" is off.
+
 # 1.29.1
 - Label printing removed (labels are printed with a separate app on the phone). The duplicate barcode check still offers "Make my own code", and the code is shown under Barcode in the wine overview.
 

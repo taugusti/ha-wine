@@ -131,7 +131,7 @@ Wines without a barcode are listed first with a **!** marker. Open one and tap *
 code or make your own. If you type or scan (USB scanner) an unknown barcode in the search field, the app first asks
 whether it belongs to one of the wines without a barcode, and saves it there.
 
-New wines that were never in stock always show in the list, marked "New · not in stock yet". Wines without a
+New wines created in the app that were never in stock always show in the list, marked "New · not in stock yet". Wines without a
 barcode are sorted with the newest created first.
 
 When you save a barcode that another wine already has (suppliers sometimes use the same code for several vintages),

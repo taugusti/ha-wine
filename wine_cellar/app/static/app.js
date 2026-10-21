@@ -108,7 +108,7 @@ const priceOf = (w) => flt.basis === "paid" ? w.purchase_price : (w.list_price ?
 const num = (v) => v === "" || v == null ? null : Number(v);
 
 function matches(w, f = flt, terms = []) {
-  if (!f.all && !(w.stock > 0) && w.last_move) return false;   // new wines that were never in stock stay visible
+  if (!f.all && !(w.stock > 0) && !isNewWine(w)) return false;   // wines created in the app that were never in stock stay visible
   if (w.archived && !f.all) return false;
   if (f.country && fold(w.country) !== fold(f.country)) return false;
   if (f.region && !fold(w.region).includes(fold(f.region).trim())) return false;
@@ -253,6 +253,8 @@ function winCell(w) {
 }
 
 const noBarcode = (w) => !String(w.barcode ?? "").trim();
+// created in the app (Excel-imported wines have an import key) and never had a stock movement
+const isNewWine = (w) => !w.import_key && !w.last_move;
 const newest = (a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")) || b.id - a.id;
 function render() {
   // wines without a barcode first (newest created first), then the chosen sort
@@ -263,7 +265,7 @@ function render() {
     th.classList.toggle("desc", th.dataset.k === sort.k && sort.dir < 0);
   });
   $("#tbl tbody").innerHTML = rows.map((w) => `<tr data-id="${w.id}" class="${w.stock > 0 ? "" : "empty"}">
-    <td class="c-name"><div class="wname">${noBarcode(w) ? '<span class="nobc" title="No barcode: open the wine and scan or enter one">!</span>' : ""}${esc(w.description)}</div><div class="sub">${!w.last_move ? '<span class="tag newtag">New · not in stock yet</span> ' : ""}${esc(w.producer || "")}${w.location ? " · " + esc(w.location) : ""}${scoreBadges(w)}</div></td>
+    <td class="c-name"><div class="wname">${noBarcode(w) ? '<span class="nobc" title="No barcode: open the wine and scan or enter one">!</span>' : ""}${esc(w.description)}</div><div class="sub">${isNewWine(w) ? '<span class="tag newtag">New · not in stock yet</span> ' : ""}${esc(w.producer || "")}${w.location ? " · " + esc(w.location) : ""}${scoreBadges(w)}</div></td>
     <td class="num c-vint">${w.vintage ?? ""}</td>
     <td class="c-region"><div>${esc(w.region || "")}</div><div class="sub">${esc(w.country || "")}</div></td>
     <td class="c-grapes hide-md sub">${esc(w.grapes || "")}</td>
@@ -974,7 +976,7 @@ async function scanned(code) {
       .sort(newest).slice(0, 8);
     if (cands.length) {
       const c = await askChoice("Unknown barcode", `${code} is not in the cellar yet. Does it belong to one of these wines without a barcode?`,
-        [...cands.map((w) => ({ label: w.description + (w.last_move ? "" : " (new)"), value: w.id })),
+        [...cands.map((w) => ({ label: w.description + (isNewWine(w) ? " (new)" : ""), value: w.id })),
          { label: "No, create a new wine", value: "new", cls: "primary" }, { label: "Cancel", value: null }]);
       if (!c) return;
       if (c !== "new") {
