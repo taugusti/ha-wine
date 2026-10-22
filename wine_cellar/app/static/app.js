@@ -490,6 +490,15 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
   if (!isNew) renderOverview();
   snapshotForm(); updateDirty();
   if (keepScroll) d.scrollTop = keepScroll;
+  if (opts.checkout && !isNew) {   // opened by scanning a bottle: go straight to taking it out
+    const sc = $("#drawer .stockc");
+    sc.classList.add("checkout"); current.checkout = true;
+    sc.insertAdjacentHTML("afterbegin", w.stock > 0 ? '<div class="cohint">Scanned. Press <b>Enter</b> or tap <b>Out</b> to take a bottle out of the cellar.</div>'
+      : '<div class="cohint warn">Scanned, but there are no bottles of this wine in stock.</div>');
+    $("#ov").before(sc);   // stock first, right under the name
+    d.scrollTop = 0;
+    $("#drawer [data-mv=out]").focus({ preventScroll: true });
+  }
   $("#wf").addEventListener("submit", (e) => e.preventDefault());
   if (isNew && preset.barcode) $("#aiText")?.focus();
 }
@@ -878,6 +887,10 @@ async function move(kind) {
   if (!Number.isFinite(n) || n < 0 || (kind !== "count" && n === 0)) { toast("Enter a valid quantity"); return; }
   try {
     const r = await send("api/movements", "POST", { wine_id: current.id, kind, qty: n, count: n, date: $("#mvDate").value });
+    if (current.checkout && kind === "out" && !isDirty()) {   // scanned bottle taken out: done
+      toast(`${n === 1 ? "1 bottle" : n + " bottles"} out · ${r.stock} left of ${current.description}`);
+      closeDrawer(); await refresh(); return;
+    }
     toast(`${KIND[kind]} recorded, stock: ${r.stock}`);
     await refresh(); reopenKeepingEdits();
   } catch (e) { toast("Error: " + e.message); }
@@ -971,10 +984,29 @@ $("#q").addEventListener("keydown", (e) => {
   if (/^\d{6,14}$/.test(v)) { e.preventDefault(); scanned(v); }
 });
 
+// typing (or a USB barcode scanner) anywhere outside a field goes into the search, so no mouse is needed
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || e.isComposing) return;
+  const el = document.activeElement;
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+  if (e.key === " " && el && el !== document.body) return;   // space on a focused button presses it
+  if (askOpen() || filterOpen() || !$("#pcam").hidden) return;
+  if (current) {                     // a wine is open: only take over when nothing would be lost
+    if (isDirty()) return;
+    closeDrawer();
+  }
+  if (curTab() !== "list") showTab("list");
+  e.preventDefault();
+  const q = $("#q");
+  q.value = e.key;                   // a new search starts with this key
+  q.focus();
+  q.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
 async function scanned(code) {
   const hits = await api("api/lookup?barcode=" + encodeURIComponent(code));
   $("#q").value = ""; render();
-  if (hits.length === 1) openWine(hits[0].id);
+  if (hits.length === 1) openWine(hits[0].id, {}, 0, { checkout: true });
   else if (hits.length > 1) { $("#q").value = code; setFilter({ all: true }); toast(`${hits.length} wines share this barcode`); }
   else {
     // unknown code: it may belong to a wine that has no barcode yet (e.g. created on the phone)

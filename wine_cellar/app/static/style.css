@@ -519,3 +519,6 @@ ul.dropped s { color: var(--muted); }
 .askbtns.many .btn { justify-content: flex-start; text-align: left; white-space: normal; }
 .askbtns.many .btn.primary { justify-content: center; }
 .askbox:has(.many) { width: min(460px, 100%); max-height: 90vh; overflow-y: auto; }
+.stockc.checkout { border: 2px solid var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
+.cohint { font-size: 14px; margin-bottom: 10px; }
+.stockc.checkout [data-mv=out] { min-width: 90px; font-size: 16px; }

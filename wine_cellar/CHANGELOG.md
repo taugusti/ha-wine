@@ -1,3 +1,7 @@
+# 1.32.0
+- Typing anywhere outside a field (or scanning with a USB scanner) goes straight into the search, on any tab; an open wine without unsaved changes is closed first.
+- A scanned (or typed) barcode of a known wine opens it in check-out mode: stock first with **Out** focused, so Enter takes a bottle out and closes the wine.
+
 # 1.31.1
 - AI lookups retry by themselves (after 6 and 24 seconds) when Google answers "high demand", and show what went wrong instead of "HTTP Error 500": Google busy, or today's free quota used up.
 

@@ -124,8 +124,10 @@ dashed band, until a real peak is set by **✨ Update with AI** or by hand.
 
 ## Barcodes
 
-Type a barcode in the search field and press Enter. A USB scanner works too. Known wines open directly,
-and unknown barcodes start a new wine. **New code** continues your own EAN-13 series (999888777xxx + check digit).
+Type a barcode and press Enter, or scan it with a USB scanner. You do not need to click the search field first:
+typing anywhere outside a field goes into the search. A known wine opens in **check-out mode** with the stock first
+and **Out** selected, so pressing Enter (or tapping Out) takes a bottle out and closes the wine. Unknown barcodes
+start a new wine. **New code** continues your own EAN-13 series (999888777xxx + check digit).
 
 Wines without a barcode are listed first with a **!** marker. Open one and tap **Enter or make one** to type its
 code or make your own. If you type or scan (USB scanner) an unknown barcode in the search field, the app first asks
