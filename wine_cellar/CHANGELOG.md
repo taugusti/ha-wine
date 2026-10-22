@@ -1,3 +1,6 @@
+# 1.31.1
+- AI lookups retry by themselves (after 6 and 24 seconds) when Google answers "high demand", and show what went wrong instead of "HTTP Error 500": Google busy, or today's free quota used up.
+
 # 1.31.0
 - Default sort (by peak): wines in stock that should be drunk soon come first: drinking window ending this or next year ("Drink soon"), or peak ending this or next year. Soonest first, then the rest by end of peak. Wines without a barcode still come before everything else.
 

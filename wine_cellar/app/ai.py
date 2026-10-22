@@ -11,6 +11,7 @@ import os
 import time
 import re
 import urllib.parse
+import urllib.error
 import urllib.request
 from datetime import date
 
@@ -61,6 +62,46 @@ def _ha(method, path, body=None, timeout=20):
                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read() or b"null")
+
+
+def _recent_ai_error():
+    """Best effort: what Google said in Home Assistant's log (busy, quota), since the REST API only returns a 500."""
+    try:
+        token = _token()
+        req = urllib.request.Request(HA_URL + "/api/error_log", headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            tail = r.read()[-15000:].decode("utf-8", "replace")   # only the newest entries: the error that just happened
+    except Exception:  # noqa: BLE001
+        return None
+    i_busy, i_quota = tail.rfind("high demand"), tail.rfind("exceeded your current quota")
+    if i_busy < 0 and i_quota < 0:
+        return None
+    return "quota" if i_quota > i_busy else "busy"
+
+
+AI_BUSY = "Google's AI is busy right now (\"high demand\"). Try again in a few minutes."
+AI_QUOTA = ("Today's free Google AI quota is used up. It resets during the night (Pacific time, about 9:00 Danish time); "
+            "until then, fill in the fields yourself.")
+
+
+def ai_call(payload, timeout=150, progress=None, tries=3):
+    """ai_task.generate_data with retries: Google often answers 'high demand' (503) for a short while."""
+    for attempt in range(tries):
+        try:
+            return _ha("POST", "/api/services/ai_task/generate_data?return_response", payload, timeout=timeout)
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                raise RuntimeError(f"Home Assistant refused the AI request (HTTP {e.code}).") from e
+            why = _recent_ai_error()
+            if why == "quota":
+                raise RuntimeError(AI_QUOTA) from e
+            if attempt == tries - 1:
+                raise RuntimeError(AI_BUSY if why == "busy" else
+                                   "The AI did not answer (Home Assistant reported an error). Try again in a few minutes.") from e
+            wait = 6 * (attempt + 1) ** 2   # 6 s, 24 s
+            if progress:
+                progress(f"the AI is busy, trying again in {wait} s")
+            time.sleep(wait)
 
 
 def ai_entity():
@@ -286,7 +327,7 @@ def about(con, wine):
     ])
     payload = {"entity_id": entity, "task_name": "wine cellar about text", "instructions": prompt,
                "structure": {"info": _t(INFO_DESC)}}
-    resp = _ha("POST", "/api/services/ai_task/generate_data?return_response", payload, timeout=120)
+    resp = ai_call(payload, timeout=120)
     data = (resp or {}).get("service_response", {}).get("data") if isinstance(resp, dict) else None
     if not isinstance(data, dict) or not str(data.get("info") or "").strip():
         raise RuntimeError("The AI Task returned no text.")
@@ -443,7 +484,7 @@ def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, pro
     if saved:
         payload["attachments"] = [{"media_content_id": f"{PHOTO_MEDIA_ID}/{name}", "media_content_type": ctype}
                                   for name, ctype in saved]
-    resp = _ha("POST", "/api/services/ai_task/generate_data?return_response", payload, timeout=150)
+    resp = ai_call(payload, timeout=150, progress=progress)
     data = (resp or {}).get("service_response", {}).get("data") if isinstance(resp, dict) else None
     if not isinstance(data, dict):
         raise RuntimeError("The AI Task returned no structured data.")
