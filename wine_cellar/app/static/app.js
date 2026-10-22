@@ -386,8 +386,7 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
       <div class="ttl"><h2>${isNew ? "New wine" : esc(w.description)}</h2>${isNew ? "" : `<div class="sub" id="ovSub"></div>`}</div>
       <button class="btn" data-close>Close</button></div>
     <div class="dbody">
-      ${isNew ? "" : `<div class="card ov" id="ov"></div>
-      <div class="card stockc">
+      ${isNew ? "" : `<div class="card stockc">
         <div class="stockrow">
           <div class="bignum">${w.stock}<small>${w.stock === 1 ? "bottle" : "bottles"}</small></div>
           <div class="stepper"><button type="button" class="btn icon" data-step="-1" aria-label="Fewer">−</button><input type="number" id="mvQty" value="1" min="0" inputmode="numeric" aria-label="Quantity"><button type="button" class="btn icon" data-step="1" aria-label="More">+</button></div>
@@ -398,7 +397,8 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
           <div class="row"><label class="small">Date <input type="date" id="mvDate" value="${today()}"></label>
           <button class="btn" data-mv="count" title="Set the stock to the given quantity">Set stock to quantity</button></div>
         </details>
-      </div>`}
+      </div>
+      <div class="card ov" id="ov"></div>`}
 
       ${aiEntity ? `${!isNew ? `<button type="button" class="btn update-ai" id="aiUpdate">✨ Update with AI</button>` : ""}
       <details class="card smart" ${isNew ? "open" : ""}>
@@ -495,7 +495,6 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
     sc.classList.add("checkout"); current.checkout = true;
     sc.insertAdjacentHTML("afterbegin", w.stock > 0 ? '<div class="cohint">Scanned. Press <b>Enter</b> or tap <b>Out</b> to take a bottle out of the cellar.</div>'
       : '<div class="cohint warn">Scanned, but there are no bottles of this wine in stock.</div>');
-    $("#ov").before(sc);   // stock first, right under the name
     d.scrollTop = 0;
     $("#drawer [data-mv=out]").focus({ preventScroll: true });
   }

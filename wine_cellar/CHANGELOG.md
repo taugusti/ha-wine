@@ -1,3 +1,6 @@
+# 1.32.1
+- The stock box (In / Out) is always at the top of a wine, above the description.
+
 # 1.32.0
 - Typing anywhere outside a field (or scanning with a USB scanner) goes straight into the search, on any tab; an open wine without unsaved changes is closed first.
 - A scanned (or typed) barcode of a known wine opens it in check-out mode: stock first with **Out** focused, so Enter takes a bottle out and closes the wine.
