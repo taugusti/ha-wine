@@ -30,6 +30,7 @@ import vocab
 import proposals
 import bulk
 import recommend
+import settings
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 def _version():
@@ -50,7 +51,6 @@ INGRESS_ADDRS = set(os.environ.get("WINE_INGRESS_ALLOW", "172.30.32.2,127.0.0.1"
 PUBLIC_FILES = {"/wc/style.css", "/wc/glass.svg", "/manifest.webmanifest", "/wc/icon-192.png", "/wc/icon-512.png",
                 "/wc/icon-maskable-512.png"}
 mimetypes.add_type("application/manifest+json", ".webmanifest")
-OWN_PREFIX = os.environ.get("WINE_BARCODE_PREFIX", "999888777")
 INT_FIELDS = {"vintage", "drink_from_age", "drink_to_age", "imp_est_from", "imp_est_to", "archived",
               "peak_from_age", "peak_to_age"}
 FLOAT_FIELDS = {"purchase_price", "list_price"}
@@ -114,6 +114,7 @@ def ean_check(d12):
 
 
 def next_barcode():
+    OWN_PREFIX = settings.get()["own_barcode_prefix"]
     c = db.con()
     best = None
     for (bc,) in c.execute("SELECT barcode FROM wine WHERE barcode LIKE ?", (OWN_PREFIX + "%",)):
@@ -591,6 +592,8 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if path == "/api/session":
             return self.send(200, {"direct": bool(getattr(self.server, "direct", False)), "user": self.user})
+        if path == "/api/settings":
+            return self.send(200, settings.get())
         if path == "/api/version":
             return self.send(200, {"version": VERSION})
         if path == "/api/next-barcode":

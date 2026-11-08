@@ -1,4 +1,4 @@
-"""Recommendations: find wines on offer in Danish shops that match what the owner buys most and fill the years
+"""Recommendations: find wines on offer in local wine shops that match what the owner buys most and fill the years
 where few bottles will be at their peak.
 
 1. analysis(): taste profile (styles, producers, grapes, price level, weighted by bottles bought) and the peak
@@ -18,11 +18,15 @@ from datetime import date
 import ai
 import db
 import linkcheck
+import settings
 import vocab
 
 YEARS_AHEAD = 15
-MAX_PRICE = 200     # DKK per bottle: offers above this are only shown folded away
-MIN_SAVING = 30     # % below the normal price at other shops
+# The price criteria (offer_max_price, offer_min_saving, offer_small_saving) and the currency come from the app
+# options; see settings.py.
+# Offer fields that held DKK prices before 1.33 (results saved in the meta table keep working).
+OLD_KEYS = {"price_dkk": "price", "normal_price_dkk": "normal_price", "before_price_dkk": "before_price",
+            "market_price_dkk": "market_price"}
 _state = {"status": "idle"}
 _lock = threading.Lock()
 _cancel = threading.Event()
@@ -125,31 +129,33 @@ def _gap_text(gaps, y):
 
 def _query(style, an):
     y = an["year"]
-    budget = style["paid_median"] or 150
+    st = settings.get()
+    cur, maxp, mins = st["currency"], round(st["offer_max_price"]), round(st["offer_min_saving"])
+    budget = style["paid_median"] or round(maxp * 0.75)
     value = style["value_median"]
+    others = f"OTHER {settings.local_shops(st)}"
     return "\n".join([
-        "Find wines that are on offer RIGHT NOW in Danish online wine shops (e.g. Vinbanden, Vinspecialisten, Philipson,",
-        "Kjær & Sommerfeldt, Skjold Burne, Supervin, Winther, Fine Wine, Lassen & Wraae, Bichel, Holte Vinlager, wine.dk,",
-        "Vinoble, Barolo.dk, Theis Vine, Kolonihaven, Dansk Vinimport) - real, current discounts, not list prices.",
+        f"Find wines that are on offer RIGHT NOW in {settings.shops_phrase(st)} - real, current discounts, not list prices.",
         "",
         f"The buyer likes: {style['type']} wine from {style['area']}, {style['country']}"
         + (f"; producers such as {', '.join(style['producers'][:4])}" if style["producers"] else "")
         + (f"; grapes {', '.join(style['grapes'])}" if style["grapes"] else "") + ".",
         f"Examples from the cellar: {'; '.join(style['examples'])}.",
-        f"The buyer usually pays about {budget} DKK per bottle on offer" + (f" for wines normally around {value} DKK" if value else "") + ".",
-        f"Requirements for every offer: at most {MAX_PRICE} DKK per bottle (the lower the better), and a saving of at least",
-        f"{MIN_SAVING} % (ideally 40-50 %) against the price of ONE bottle or the wine's original price. Leave out offers",
-        "that do not meet both. Also give the price at other Danish shops, so it can be seen whether the saving is real.",
+        f"The buyer usually pays about {budget} {cur} per bottle on offer" + (f" for wines normally around {value} {cur}" if value else "") + ".",
+        f"Requirements for every offer: at most {maxp} {cur} per bottle (the lower the better), and a saving of at least",
+        f"{mins} % (ideally {mins + 10}-{mins + 20} %) against the price of ONE bottle or the wine's original price. Leave out offers",
+        f"that do not meet both. Also give the price at {others}, so it can be seen whether the saving is real.",
         f"The cellar lacks wines that are at their PEAK in {_gap_text(an['gaps'], y)}. Prefer wines and vintages whose",
         "peak (optimal drinking period) overlaps those years, based on published drinking windows or the producer's",
         "and vintage's known ageing potential (your own estimate is fine). Similar wines from neighbouring regions are fine.",
         "Only vintage wines (no non-vintage or multi-vintage blends): a peak in a given year needs a vintage.",
-        "Prices, all in DKK per ONE 75 cl bottle (divide a case price by the number of bottles):",
-        "- price_dkk: the offer price per bottle on the offer's terms (e.g. the per-bottle price when you buy 6).",
-        "- offer_qty: how many bottles you must buy to get price_dkk (1 if any quantity).",
-        "- before_price_dkk: the 'before'/'normal' price the shop shows next to the offer, or null.",
+        f"Prices, all in {cur} per ONE 75 cl bottle (divide a case price by the number of bottles; convert other",
+        f"currencies to {cur}):",
+        "- price: the offer price per bottle on the offer's terms (e.g. the per-bottle price when you buy 6).",
+        "- offer_qty: how many bottles you must buy to get price (1 if any quantity).",
+        "- before_price: the 'before'/'normal' price the shop shows next to the offer, or null.",
         "- before_basis: what that before price is: 'earlier price', 'single bottle', 'RRP', 'other shops' or 'unknown'.",
-        "- market_price_dkk: the lowest current price for the SAME wine and vintage at OTHER Danish shops (search for",
+        f"- market_price: the lowest current price for the SAME wine and vintage at {others} (search for",
         "  it; per bottle, single-bottle price), or null if no other shop has it. market_shop: that shop's name.",
         "offer_ends is the end date as YYYY-MM-DD, or null if the page shows no date.",
         "",
@@ -160,8 +166,8 @@ def _query(style, an):
         "exact product URL, leave the wine out. Use the wine name and vintage exactly as the shop writes them.",
         "Return ONLY this JSON, no other text:",
         '{"offers": [{"wine": str, "producer": str, "vintage": int, "country": str, "region": str, "grapes": str,',
-        ' "wine_type": str, "shop": str, "url": str, "price_dkk": number, "offer_qty": int,',
-        ' "before_price_dkk": number or null, "before_basis": str, "market_price_dkk": number or null, "market_shop": str,',
+        ' "wine_type": str, "shop": str, "url": str, "price": number, "offer_qty": int,',
+        ' "before_price": number or null, "before_basis": str, "market_price": number or null, "market_shop": str,',
         ' "offer_ends": str or null, "drink_from_year": int, "drink_to_year": int, "peak_from_year": int,',
         ' "peak_to_year": int, "window_source": str, "why": str}]}',
         '"why" is a JSON string (not a list) of 2-3 short factual points about the wine itself, each line starting',
@@ -174,7 +180,7 @@ def _query(style, an):
 
 
 def _ask(agent, text, conversation_id=None):
-    body = {"agent_id": agent, "language": "en", "text": text}
+    body = {"agent_id": agent, "language": settings.get()["ai_language"], "text": text}
     if conversation_id:
         body["conversation_id"] = conversation_id
     resp = ai._ha("POST", "/api/services/conversation/process?return_response", body, timeout=150)
@@ -211,18 +217,30 @@ def _text(v):
     return str(v or "")
 
 
-def _verdict(real):
+def _verdict(real, st=None):
     """Is it a real deal? Judged against the price at other shops, not the shop's own 'before' price."""
+    st = st or settings.get()
     if real is None:
         return "unchecked"
-    return "good" if real >= MIN_SAVING else "some" if real >= 15 else "normal" if real >= -5 else "dear"
+    return ("good" if real >= st["offer_min_saving"] else "some" if real >= st["offer_small_saving"]
+            else "normal" if real >= -5 else "dear")
 
 
-def meets(o):
-    """The owner's criteria: at most MAX_PRICE per bottle and a saving of at least MIN_SAVING % against the price of
-    one bottle or the original price (the shop's 'before' price), or against other shops."""
+def meets(o, st=None):
+    """The owner's criteria: at most offer_max_price per bottle and a saving of at least offer_min_saving % against
+    the price of one bottle or the original price (the shop's 'before' price), or against other shops."""
+    st = st or settings.get()
     saving = max(o.get("discount_pct") or 0, o.get("real_pct") or 0)
-    return (o.get("price_dkk") or 9e9) <= MAX_PRICE and saving >= MIN_SAVING
+    return (o.get("price") or 9e9) <= st["offer_max_price"] and saving >= st["offer_min_saving"]
+
+
+def _upgrade(o):
+    """Rename pre-1.33 price fields (price_dkk ...) to the currency-neutral names."""
+    if isinstance(o, dict):
+        for old, new in OLD_KEYS.items():
+            if old in o:
+                o.setdefault(new, o.pop(old))
+    return o
 
 
 def _date(v):
@@ -251,7 +269,8 @@ def clean_offers(offers, an, owned):
     for o in offers:
         if not isinstance(o, dict):
             continue
-        url, price = str(o.get("url") or ""), _num(o.get("price_dkk"))
+        _upgrade(o)
+        url, price = str(o.get("url") or ""), _num(o.get("price"))
         if not url.startswith("http") or not price or price <= 0:
             continue
         if urllib.parse.urlparse(url).path.strip("/") == "":
@@ -267,19 +286,19 @@ def clean_offers(offers, an, owned):
         if not name or k in seen:
             continue
         seen.add(k)
-        normal = _num(o.get("before_price_dkk") or o.get("normal_price_dkk"))
+        normal = _num(o.get("before_price") or o.get("normal_price"))
         disc = round((1 - price / normal) * 100) if normal and normal > price else None
-        market = _num(o.get("market_price_dkk"))
+        market = _num(o.get("market_price"))
         real = round((1 - price / market) * 100) if market else None   # saving against other shops; negative = dearer
         fit = sum(short.get(yr, 0) for yr in range(pf, pt + 1)) if pf and pt else 0
         out.append({
             "wine": name, "producer": o.get("producer") or "", "vintage": vint, "country": o.get("country") or "",
             "region": o.get("region") or "", "grapes": o.get("grapes") or "", "wine_type": (o.get("wine_type") or "red").lower(),
-            "shop": o.get("shop") or urllib.parse.urlparse(url).hostname, "url": url, "price_dkk": round(price),
-            "normal_price_dkk": round(normal) if normal else None, "discount_pct": disc,
+            "shop": o.get("shop") or urllib.parse.urlparse(url).hostname, "url": url, "price": round(price),
+            "normal_price": round(normal) if normal else None, "discount_pct": disc,
             "offer_qty": max(1, _int(o.get("offer_qty")) or 1), "before_basis": str(o.get("before_basis") or "unknown"),
-            "market_price_dkk": round(market) if market else None, "market_shop": o.get("market_shop") or "",
-            "real_pct": real, "verdict": _verdict(real), "max_price": MAX_PRICE, "min_saving": MIN_SAVING, "offer_ends": _date(o.get("offer_ends")),
+            "market_price": round(market) if market else None, "market_shop": o.get("market_shop") or "",
+            "real_pct": real, "verdict": _verdict(real), "offer_ends": _date(o.get("offer_ends")),
             "drink_from_year": _int(o.get("drink_from_year")), "drink_to_year": _int(o.get("drink_to_year")),
             "peak_from_year": pf, "peak_to_year": pt, "window_source": o.get("window_source") or "",
             "why": ai.bullets(_text(o.get("why"))), "fit": fit, "style": o.get("_style"),
@@ -295,8 +314,17 @@ def status():
 
 
 def last(con):
+    """The last search, with today's criteria applied (they can change in the app options after a search)."""
     row = con.execute("SELECT value FROM meta WHERE key='recommendations'").fetchone()
-    return json.loads(row[0]) if row else None
+    if not row:
+        return None
+    res = json.loads(row[0])
+    res.setdefault("currency", "DKK")   # searches before 1.33 were always in DKK
+    for o in res.get("dropped") or []:
+        _upgrade(o)
+    if res.get("offers"):
+        res["offers"] = sort_offers(res["offers"])
+    return res
 
 
 def run(enrich):
@@ -336,7 +364,7 @@ def run(enrich):
         dropped = [o for o in checked if not o.get("link_ok")]   # kept with prices and a Google search link
         print(f"OFFERS: {len(cleaned)} with a confirmed product page, {len(dropped)} left out: "
               f"{[(o.get('wine'), o.get('vintage'), o.get('shop'), o.get('agent_url')) for o in dropped]}", flush=True)
-        result = {"created": time.strftime("%Y-%m-%d %H:%M"), "analysis": an, "offers": cleaned, "dropped": dropped,
+        result = {"created": time.strftime("%Y-%m-%d %H:%M"), "currency": settings.get()["currency"], "analysis": an, "offers": cleaned, "dropped": dropped,
                   "errors": errors, "agent": agent}
         with db.lock():
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('recommendations', ?)", (json.dumps(result, ensure_ascii=False),))
@@ -352,11 +380,15 @@ def run(enrich):
 def sort_offers(offers):
     """Confirmed shop pages first, then best gap fit, then biggest discount."""
     rank = {"good": 0, "unchecked": 1, "some": 2, "normal": 3, "dear": 4}
+    st = settings.get()
     for o in offers:
-        o["meets"] = meets(o)
+        _upgrade(o)
+        o["meets"] = meets(o, st)
+        if o.get("verdict") != "unchecked" and o.get("real_pct") is not None:
+            o["verdict"] = _verdict(o["real_pct"], st)
     return sorted(offers, key=lambda r: (not r.get("link_ok"), not r["meets"], rank.get(r.get("verdict"), 1), -(r["fit"] > 0),
                                          -(r.get("real_pct") if r.get("real_pct") is not None else r.get("discount_pct") or 0),
-                                         r.get("price_dkk") or 0))
+                                         r.get("price") or 0))
 
 
 def _recheck():

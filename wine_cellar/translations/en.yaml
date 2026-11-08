@@ -1,0 +1,63 @@
+configuration:
+  ai_task_entity:
+    name: AI Task entity
+    description: The ai_task entity used for Smart fill. Empty = the first AI Task found.
+  search_agent_entity:
+    name: Web search agent
+    description: A conversation agent with web search (e.g. Gemini with Google Search). Empty = an agent whose entity id contains "search".
+  allowed_users:
+    name: Users with direct access
+    description: Home Assistant user names that may log in on the direct HTTPS port.
+  certfile:
+    name: Certificate file
+    description: Certificate in /ssl for the direct port. Empty = the app's own local certificate authority.
+  keyfile:
+    name: Key file
+    description: Private key in /ssl for the certificate above.
+  extra_hostnames:
+    name: Extra host names
+    description: Host names or IP addresses added to the app's own certificate.
+  currency:
+    name: Currency
+    description: ISO currency code for all prices, e.g. EUR, DKK, SEK, USD. Empty = Home Assistant's currency (Settings → System → General).
+  number_locale:
+    name: Number format
+    description: Locale used to format prices, e.g. en-GB, da-DK, de-DE. Empty = the browser's own setting.
+  search_area:
+    name: Shop search area
+    description: Where the web search looks for shop prices and offers, in plain words — a country, a region or a wider area, e.g. "Denmark", "Bavaria, Germany", "Scandinavia", "the EU". Empty = Home Assistant's country.
+  search_fallback_area:
+    name: Fallback search area
+    description: Where to look for a price when no shop in the search area has the wine. Empty = neighbouring countries.
+  shops:
+    name: Preferred shops
+    description: Shop names (or domains) given to the search agent as examples of where to look.
+  offer_max_price:
+    name: Offers — highest price per bottle
+    description: Offers above this price (in your currency) are folded away under "Other offers". 0 = a default for your currency.
+  offer_min_saving:
+    name: Offers — minimum saving (%)
+    description: The smallest discount (against one bottle, the original price or other shops) for an offer to be listed first.
+  offer_small_saving:
+    name: Offers — "small saving" from (%)
+    description: Savings against other shops from this level up to the minimum saving are labelled "Small saving".
+  value_mid:
+    name: Value for +2 years
+    description: A wine with at least this value (normal price, your currency) gets 2 extra years in the rule-based drinking window. 0 = a default for your currency.
+  value_high:
+    name: Value for +4 years
+    description: A wine with at least this value gets 4 extra years instead. 0 = a default for your currency.
+  own_barcode_prefix:
+    name: Own barcode prefix
+    description: Digits (3-11) that start the EAN-13 codes the app makes for wines without a barcode. Empty = 290000 (a GS1 in-store range).
+  ai_language:
+    name: AI language
+    description: Language code sent to the web search agent, e.g. en.
+  import_wine_sheet:
+    name: Import — wine sheet
+    description: Name of the sheet with the wines in the Excel workbook. Empty = "Wines", "Wine" or "Vin".
+  import_stock_sheet:
+    name: Import — stock sheet
+    description: Name of the sheet with stock movements. Empty = "Stock", "Movements" or "Lager".
+network:
+  8100/tcp: Direct access over HTTPS with login (for users who should only see Wine Cellar)

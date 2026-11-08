@@ -58,9 +58,10 @@
     <div class="panel">
       <h2>Import from Excel</h2>
       <ul class="tips">
-        <li>Choose your <code>vindatabase.xlsm</code></li>
+        <li>Choose an Excel workbook (.xlsx/.xlsm) with a wine sheet (default <em>Wines</em>) and a stock sheet (default <em>Stock</em>); the sheet names can be set in the app configuration</li>
+        <li>Wine columns: Description, Vintage, Country, Region, Producer, Grapes, Purchase price, List price, Barcode, Shop, Note, Link, Stock. Stock sheet: date, barcode, quantity, In/Out</li>
         <li>Wines are matched on barcode (otherwise description + vintage) and updated</li>
-        <li>All movements from the <em>Lager</em> sheet are replaced, so the import can be run again and again</li>
+        <li>All movements from the stock sheet are replaced, so the import can be run again and again</li>
       </ul>
       <p id="metaInfo" class="muted"></p>
       <div class="row">
@@ -117,10 +118,10 @@
         <label>Region<input type="search" id="fRegion" list="dl-fregion" placeholder="Any region" autocomplete="off"></label>
       </div>
       <label>Grape<input type="search" id="fGrape" list="dl-fgrape" placeholder="Any grape" autocomplete="off"></label>
-      <div class="fgroup"><span class="flabel">Price per bottle (DKK)</span>
+      <div class="fgroup"><span class="flabel" id="fPriceLabel">Price per bottle</span>
         <div class="seg" id="fBasis"><button type="button" data-v="value" class="on">Value</button><button type="button" data-v="paid">Paid</button></div>
         <div class="frange"><input type="number" id="fPmin" inputmode="numeric" min="0" placeholder="Min"><span>–</span><input type="number" id="fPmax" inputmode="numeric" min="0" placeholder="Max"></div>
-        <div class="fquick" id="fPquick"><button type="button" data-p="-150">≤ 150</button><button type="button" data-p="150-300">150–300</button><button type="button" data-p="300-600">300–600</button><button type="button" data-p="600-">600+</button></div>
+        <div class="fquick" id="fPquick"></div>
       </div>
       <div class="fgroup"><span class="flabel">Vintage</span>
         <div class="frange"><input type="number" id="fVmin" inputmode="numeric" placeholder="From"><span>–</span><input type="number" id="fVmax" inputmode="numeric" placeholder="To"></div>

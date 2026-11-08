@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 from datetime import date
 
+import settings
 import vocab
 
 HA_URL = os.environ.get("WINE_HA_URL", "http://supervisor/core")
@@ -80,7 +81,7 @@ def _recent_ai_error():
 
 
 AI_BUSY = "Google's AI is busy right now (\"high demand\"). Try again in a few minutes."
-AI_QUOTA = ("Today's free Google AI quota is used up. It resets during the night (Pacific time, about 9:00 Danish time); "
+AI_QUOTA = ("Today's free Google AI quota is used up. It resets at midnight Pacific time; "
             "until then, fill in the fields yourself.")
 
 
@@ -170,7 +171,9 @@ def _json_from_text(t, want=None):
 
 
 def web_search(agent, s):
-    """Ask the search agent for current Danish price and published critic scores for the identified wine."""
+    """Ask the search agent for the current local shop price and published critic scores for the identified wine."""
+    st = settings.get()
+    cur, shops = st["currency"], settings.local_shops(st)
     name = s.get("description") or ""
     if s.get("vintage") and str(s["vintage"]) not in name:
         name += f" {s['vintage']}"
@@ -180,8 +183,8 @@ def web_search(agent, s):
             bits.append(f"{label}: {s[k]}")
     q = "\n".join([
         "Search the web for this exact wine and vintage.", *bits, "",
-        "1. Find current prices in Danish wine shops for ONE bottle of this size (DKK incl. VAT, excluding shipping",
-        "   and quantity discounts). If no Danish shop has it, use other European shops and convert to DKK.",
+        f"1. Find current prices in wine {shops} for ONE bottle of this size ({cur} incl. VAT, excluding shipping",
+        f"   and quantity discounts). If none of those shops has it, use shops in {st['search_fallback_area']} and convert to {cur}.",
         "2. Find published scores for this exact vintage from Robert Parker Wine Advocate, Wine Spectator and",
         "   James Suckling, with the URL of the page where you found each score (the critic's own page or a shop page",
         "   quoting it). Only scores you actually found; never estimate.",
@@ -189,15 +192,15 @@ def web_search(agent, s):
         "   Suckling, Vinous, Jancis Robinson, Decanter, Jeb Dunnuck, Jeff Leve ...) or by the producer (technical",
         "   sheet, website). Give each as calendar years with the page URL. Also give a peak/optimal period if stated.",
         "Return ONLY this JSON, no other text:",
-        '{"price_dkk": number or null, "price_note": "e.g. median of 3 Danish shops" or null,',
-        ' "price_sources": [{"shop": str, "price_dkk": number, "url": str}],',
+        f'{{"price": number or null (in {cur}), "price_note": "e.g. median of 3 shops" or null,',
+        ' "price_sources": [{"shop": str, "price": number, "url": str}],',
         ' "rp_score": str or null, "rp_url": str or null, "ws_score": str or null, "ws_url": str or null,',
         ' "js_score": str or null, "js_url": str or null,',
         ' "drinking_windows": [{"source": str, "from_year": int, "to_year": int, "peak_from_year": int or null,',
         '                        "peak_to_year": int or null, "url": str}]}',
     ])
     resp = _ha("POST", "/api/services/conversation/process?return_response",
-               {"agent_id": agent, "language": "en", "text": q}, timeout=100)
+               {"agent_id": agent, "language": st["ai_language"], "text": q}, timeout=100)
     r = (resp or {}).get("service_response", {}).get("response", {}) if isinstance(resp, dict) else {}
     speech = r.get("speech", {}).get("plain", {}).get("speech", "")
     if r.get("response_type") == "error":
@@ -211,7 +214,8 @@ def web_search(agent, s):
 def merge_search(s, w):
     """Put web search results into the suggestion. Found facts win over the AI's own knowledge."""
     found = {"sources": []}
-    price = w.get("price_dkk")
+    cur = settings.get()["currency"]
+    price = w.get("price", w.get("price_dkk"))
     try:
         price = float(price) if price not in (None, "") else None
     except (TypeError, ValueError):
@@ -223,7 +227,7 @@ def merge_search(s, w):
             s["uncertain_fields"].remove("list_price")
     for p in w.get("price_sources") or []:
         if isinstance(p, dict) and str(p.get("url", "")).startswith("http"):
-            found["sources"].append({"label": f"{p.get('shop') or 'Shop'}: {p.get('price_dkk')} DKK", "url": p["url"]})
+            found["sources"].append({"label": f"{p.get('shop') or 'Shop'}: {p.get('price', p.get('price_dkk'))} {cur}", "url": p["url"]})
     for k in ("rp", "ws", "js"):
         sc = w.get(f"{k}_score")
         if sc not in (None, "", "null"):
@@ -273,9 +277,19 @@ def merge_windows(s, windows, found):
             s["uncertain_fields"].remove(k)
 
 
+def structure():
+    """STRUCTURE with the configured currency and market in the price description."""
+    st = settings.get()
+    d = dict(STRUCTURE)
+    d["list_price"] = _n(f"Estimated typical retail price in {settings.local_shops(st)} for ONE bottle of this size, "
+                         f"in {st['currency']} incl. VAT, excluding shipping and without quantity discounts; "
+                         "0 if you cannot estimate it")
+    return d
+
+
 def barcode_info(code):
     code = re.sub(r"\D", "", code or "")
-    if len(code) < 8 or code.startswith("999888777"):
+    if len(code) < 8 or code.startswith(settings.get()["own_barcode_prefix"]):
         return None
     try:
         url = f"https://world.openfoodfacts.org/api/v2/product/{code}.json?fields=product_name,brands,quantity,categories_tags,countries_tags"
@@ -362,7 +376,7 @@ STRUCTURE = {
     "advice": _t("Drinking advice for this specific wine as 1-3 short bullet lines, each starting with '- '"),
     "serving": _t("Serving advice as short bullet lines, each starting with '- ': '- Temperature: …', '- Decanting: …', "
                   "'- Food: …'"),
-    "list_price": _n("Estimated typical Danish retail price for ONE bottle of this size, in DKK incl. VAT, excluding "
+    "list_price": _n("Estimated typical retail price for ONE bottle of this size, incl. VAT, excluding "
                      "shipping and without quantity discounts; 0 if you cannot estimate it"),
     "quantity": _n("Number of bottles bought according to the invoice text, or 0 if not present"),
     "shop": _t("Wine shop / seller if it can be seen from the invoice text, else empty"),
@@ -412,7 +426,7 @@ def build_prompt(con, text, barcode, binfo, current, n_photos=0, photo_labels=No
             {k: current.get(k) for k in ("description", "vintage", "producer", "country", "region", "grapes")
              if current.get(k)}, ensure_ascii=False))
         if current.get("list_price"):
-            lines.append(f"Normal retail value of the wine (not the discounted price paid): {current['list_price']:.0f} DKK per bottle")
+            lines.append(f"Normal retail value of the wine (not the discounted price paid): {settings.money(current['list_price'])} per bottle")
     lines += [
         "",
         "Spelling rules - the owner wants every value written the same way every time:",
@@ -429,14 +443,15 @@ def build_prompt(con, text, barcode, binfo, current, n_photos=0, photo_labels=No
         "(style, reputation, how their wines age), the cuvée's place in the producer's range, the vintage's character",
         "in this region (e.g. a ripe, structured year ages longer; a light or early-drinking year shorter), the grapes,",
         "the wine's normal price level (its value, never what the owner paid) and the bottle size (magnums age more",
-        "slowly). The owner mostly buys at steep, short-lived discounts, so an invoice or purchase price says nothing",
+        "slowly). Wines are often bought at steep, short-lived discounts, so an invoice or purchase price says nothing",
         "about the wine's quality or ageing potential - ignore it for the window. If a critic or the producer has published a",
         "window for this wine and vintage, use it. Also give the peak period. Explain the specifics in window_basis;",
         "if you only know general norms for the appellation, say so and list drink_from_age/drink_to_age in",
         "uncertain_fields.",
         "Critic scores: only give a score if you know it was actually published for this exact wine and vintage,",
         "and give the URL where it is published. Never estimate or invent a score; leave it empty instead.",
-        "The estimated price (list_price) is a typical Danish shop price for one bottle; it is an estimate, so list",
+        f"The estimated price (list_price) is a typical price in {settings.local_shops()} for one bottle, in "
+        f"{settings.get()['currency']}; it is an estimate, so list",
         "list_price in uncertain_fields unless you are confident. Do not use the invoice price for it.",
         "Leave text fields empty and number fields 0 when you do not know.",
     ]
@@ -480,7 +495,7 @@ def lookup(con, text, barcode, current=None, photos=None, photo_labels=None, pro
             photo_labels = ["front label (saved earlier)"]
     progress("reading the label" if saved else "identifying the wine")
     prompt = build_prompt(con, text or "", barcode, binfo, current, len(saved), photo_labels)
-    payload = {"entity_id": entity, "task_name": "wine cellar lookup", "instructions": prompt, "structure": STRUCTURE}
+    payload = {"entity_id": entity, "task_name": "wine cellar lookup", "instructions": prompt, "structure": structure()}
     if saved:
         payload["attachments"] = [{"media_content_id": f"{PHOTO_MEDIA_ID}/{name}", "media_content_type": ctype}
                                   for name, ctype in saved]

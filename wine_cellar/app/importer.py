@@ -1,12 +1,14 @@
-"""Import from the legacy Excel wine database (.xlsm/.xlsx).
+"""Import from an Excel wine database (.xlsm/.xlsx).
 
 Safe to run repeatedly:
 - Wines are matched on barcode (otherwise description + vintage) and updated.
   Fields that only exist in the app (wine type, location) are preserved.
-- All movements with source 'excel' are replaced by the workbook's 'Lager' sheet.
+- All movements with source 'excel' are replaced by the workbook's stock sheet.
   Movements created in the app are kept unless drop_app=True.
 
-Note: the workbook's sheet and column names are Danish and are matched as-is.
+The workbook needs a wine sheet and a stock sheet. Their names are set with the app options import_wine_sheet and
+import_stock_sheet; when empty, 'Wines'/'Wine' and 'Stock' are used (or the legacy Danish 'Vin' and 'Lager').
+Column headers may be the English names below or the legacy Danish ones (case does not matter).
 """
 import db
 import io
@@ -17,14 +19,32 @@ import openpyxl
 
 from db import now
 from estimate import norm
+import settings
 import vocab
 
 HEADER_MAP = {
+    # English
+    "description": "description", "vintage": "vintage", "stock": "_excel_stock", "country": "country",
+    "producer": "producer", "region": "region", "drink age from": "drink_from_age", "drink age to": "drink_to_age",
+    "grapes": "grapes", "purchase price": "purchase_price", "list price": "list_price", "barcode": "barcode",
+    "shop": "shop", "note": "note", "link": "link",
+    # legacy Danish workbook
     "beskrivelse": "description", "årgang": "vintage", "lager": "_excel_stock", "land": "country",
-    "producent": "producer", "distrikt": "region", "drink age from": "drink_from_age",
-    "drink age to": "drink_to_age", "druer": "grapes", "anskaffelsespris": "purchase_price",
-    "listepris": "list_price", "barcode": "barcode", "vinhandel": "shop", "note": "note", "link": "link",
+    "producent": "producer", "distrikt": "region", "druer": "grapes", "anskaffelsespris": "purchase_price",
+    "listepris": "list_price", "vinhandel": "shop",
 }
+WINE_SHEETS = ["Wines", "Wine", "Vin"]
+STOCK_SHEETS = ["Stock", "Movements", "Lager"]
+
+
+def _sheet(wb, wanted, defaults, what):
+    names = [wanted] if wanted else defaults
+    for n in names:
+        for real in wb.sheetnames:
+            if real.strip().lower() == n.strip().lower():
+                return wb[real]
+    raise ValueError(f"The workbook has no {what} sheet named {' or '.join(repr(n) for n in names)} "
+                     f"(set import_{what}_sheet in the app configuration). Sheets: {', '.join(wb.sheetnames)}.")
 # Columns U-AA (Drink from/to (years after vintage), drinking year from/to, Drinking advice,
 # rationale, advice2) are intentionally not imported.
 EXCEL_OWNED = ["barcode", "description", "vintage", "country", "producer", "region", "grapes", "drink_from_age",
@@ -73,16 +93,17 @@ def to_float(v):
 
 def read_workbook(data):
     wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
-    if "Vin" not in wb.sheetnames or "Lager" not in wb.sheetnames:
-        raise ValueError("The workbook must contain the sheets 'Vin' and 'Lager'.")
-    rows = list(wb["Vin"].iter_rows(values_only=True))
+    st = settings.get()
+    wsheet = _sheet(wb, st["import_wine_sheet"], WINE_SHEETS, "wine")
+    ssheet = _sheet(wb, st["import_stock_sheet"], STOCK_SHEETS, "stock")
+    rows = list(wsheet.iter_rows(values_only=True))
     header = [str(h).strip().lower() if h is not None else "" for h in rows[0]]
     idx = {}
     for i, h in enumerate(header):
         if h in HEADER_MAP and HEADER_MAP[h] not in idx:
             idx[HEADER_MAP[h]] = i
     if "description" not in idx:
-        raise ValueError("Could not find the column 'Beskrivelse' in the 'Vin' sheet.")
+        raise ValueError(f"Could not find a 'Description' column in the '{wsheet.title}' sheet.")
     wines = []
     for r in rows[1:]:
         g = lambda k: r[idx[k]] if k in idx and idx[k] < len(r) else None  # noqa: E731
@@ -102,7 +123,7 @@ def read_workbook(data):
         wines.append(w)
 
     moves = []
-    for r in list(wb["Lager"].iter_rows(values_only=True))[1:]:
+    for r in list(ssheet.iter_rows(values_only=True))[1:]:
         if not r or len(r) < 4:
             continue
         d, bc, qty, act = r[0], r[1], r[2], r[3]
@@ -222,7 +243,7 @@ def run_import(con, data, dry_run=False, drop_app=False):
         # wines from the file without any movement get a placeholder (excel source: replaced on the next import)
         db.add_placeholder_moves(con, {key_to_id[w["import_key"]] for w in wines}, source="excel")
 
-        # check: stock in the app vs. the Excel column 'Lager'
+        # check: stock in the app vs. the workbook's stock column
         for w in wines:
             if w["_excel_stock"] is None:
                 continue

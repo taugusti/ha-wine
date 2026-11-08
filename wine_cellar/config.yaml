@@ -1,5 +1,5 @@
 name: Wine Cellar
-version: "1.32.1"
+version: "1.33.0"
 slug: wine_cellar
 description: Wine database with stock, search and drinking windows
 url: https://github.com/taugusti/ha-wine
@@ -27,6 +27,20 @@ options:
   certfile: ""
   keyfile: ""
   extra_hostnames: []
+  currency: ""
+  number_locale: ""
+  search_area: ""
+  search_fallback_area: ""
+  shops: []
+  offer_max_price: 0
+  offer_min_saving: 30
+  offer_small_saving: 15
+  value_mid: 0
+  value_high: 0
+  own_barcode_prefix: ""
+  ai_language: "en"
+  import_wine_sheet: ""
+  import_stock_sheet: ""
 schema:
   ai_task_entity: str?
   search_agent_entity: str?
@@ -36,6 +50,21 @@ schema:
   keyfile: str?
   extra_hostnames:
     - str
+  currency: str?
+  number_locale: str?
+  search_area: str?
+  search_fallback_area: str?
+  shops:
+    - str
+  offer_max_price: float?
+  offer_min_saving: float?
+  offer_small_saving: float?
+  value_mid: float?
+  value_high: float?
+  own_barcode_prefix: match(^\d{0,11}$)?
+  ai_language: str?
+  import_wine_sheet: str?
+  import_stock_sheet: str?
 map:
   - type: media
     read_only: false

@@ -19,6 +19,8 @@ import urllib.request
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 
+import settings
+
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/131.0 Safari/537.36")
 MAX_BYTES = 2_000_000
@@ -247,11 +249,11 @@ def check_all(offers, workers=4):
             o.update(check(o))
         except Exception:  # noqa: BLE001
             o.update(checked=True, link_ok=False, url=site_search(o, None), agent_url=o.get("url"))
-        pp, price, before = o.get("page_price"), o.get("price_dkk"), o.get("normal_price_dkk")
+        pp, price, before = o.get("page_price"), o.get("price", o.get("price_dkk")), o.get("normal_price", o.get("normal_price_dkk"))
         near = lambda a, b: a and b and abs(a - b) / b <= 0.03  # noqa: E731
         if pp and price and not near(pp, price) and not near(pp, before):
             # a multi-buy offer often shows the single-bottle price on the page; just show it, do not change the offer
-            o["price_note"] = f"The shop's page shows {pp} DKK"
+            o["price_note"] = f"The shop's page shows {settings.money(pp)}"
         return o
     with ThreadPoolExecutor(workers) as ex:
         return list(ex.map(one, offers))

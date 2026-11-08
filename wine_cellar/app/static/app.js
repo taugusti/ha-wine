@@ -4,7 +4,16 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fold = (s) => String(s ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
-const kr = (n) => n == null ? "" : Math.round(n).toLocaleString("en-GB") + " DKK";
+// settings from the app options (currency, number format, offer criteria ...); see api/settings
+let CFG = { currency: "EUR", number_locale: "", offer_max_price: 27, offer_min_saving: 30, value_mid: 40, value_high: 80 };
+const LOC = () => CFG.number_locale || undefined;
+const num0 = (v) => Math.round(Number(v)).toLocaleString(LOC());
+function moneyIn(n, cur) {
+  if (n == null || n === "") return "";
+  try { return new Intl.NumberFormat(LOC(), { style: "currency", currency: cur || CFG.currency, maximumFractionDigits: 0 }).format(n); }
+  catch { return `${num0(n)} ${cur || CFG.currency}`; }
+}
+const kr = (n) => moneyIn(n);
 const LOADED_VERSION = (document.querySelector('script[src*="app.js"]')?.src.match(/v=([^&]+)/) || [])[1] || "";
 window.WC_APP_VERSION = LOADED_VERSION;
 // report browser errors to the app log (Settings → Apps → Wine Cellar → Log)
@@ -92,6 +101,19 @@ function status(w) {
 }
 
 // ------------------------------------------------------------- list
+async function loadSettings() {
+  try { CFG = { ...CFG, ...(await api("api/settings")) }; } catch (e) { clientLog("settings", e.message); }
+  priceQuick();
+}
+// quick price ranges in the filter sheet, from the value levels in the app options
+function priceQuick() {
+  const r = (v) => { const m = 10 ** Math.max(0, Math.floor(Math.log10(v)) - 1); return Math.round(v / m) * m; };
+  const lo = r(CFG.value_mid / 2), mid = r(CFG.value_mid), hi = r(CFG.value_high);
+  const el = $("#fPquick"); if (!el) return;
+  el.innerHTML = [[`-${lo}`, `≤ ${num0(lo)}`], [`${lo}-${mid}`, `${num0(lo)}–${num0(mid)}`], [`${mid}-${hi}`, `${num0(mid)}–${num0(hi)}`], [`${hi}-`, `${num0(hi)}+`]]
+    .map(([p, l]) => `<button type="button" data-p="${p}">${l}</button>`).join("");
+  const lab = $("#fPriceLabel"); if (lab) lab.textContent = `Price per bottle (${CFG.currency})`;
+}
 async function refresh() {
   wines = await api("api/wines");
   render();
@@ -139,13 +161,13 @@ function filtered() {
 
 // the active filters as short labels, each with a function that removes it
 function activeFilters() {
-  const a = [], kr0 = (v) => Number(v).toLocaleString("en-GB");
+  const a = [], kr0 = num0;
   if (flt.country) a.push([flt.country, () => { flt.country = ""; }]);
   if (flt.region) a.push([flt.region, () => { flt.region = ""; }]);
   if (flt.grape) a.push([flt.grape, () => { flt.grape = ""; }]);
   if (flt.pmin !== "" || flt.pmax !== "") {
     const lbl = flt.pmin !== "" && flt.pmax !== "" ? `${kr0(flt.pmin)}–${kr0(flt.pmax)}` : flt.pmin !== "" ? `≥ ${kr0(flt.pmin)}` : `≤ ${kr0(flt.pmax)}`;
-    a.push([`${flt.basis === "paid" ? "Paid" : "Value"} ${lbl} DKK`, () => { flt.pmin = flt.pmax = ""; }]);
+    a.push([`${flt.basis === "paid" ? "Paid" : "Value"} ${lbl} ${CFG.currency}`, () => { flt.pmin = flt.pmax = ""; }]);
   }
   if (flt.vmin !== "" || flt.vmax !== "") a.push([flt.vmin !== "" && flt.vmax !== "" ? (flt.vmin === flt.vmax ? flt.vmin : `${flt.vmin}–${flt.vmax}`) : flt.vmin !== "" ? `${flt.vmin} or later` : `${flt.vmax} or older`, () => { flt.vmin = flt.vmax = ""; }]);
   flt.types.forEach((t) => a.push([t[0].toUpperCase() + t.slice(1), () => { flt.types = flt.types.filter((x) => x !== t); }]));
@@ -408,7 +430,7 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
           <div class="pslot" id="slot-back"></div>
         </div>
         ${tips("Photo of the front label: the lookup starts by itself", "Back label (grapes, barcode) improves it", "Invoice text and barcode are optional", isNew ? "" : "Without photo or text, the current description is used", "You choose which suggestions to apply")}
-        <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  à 249,00 kr'"></textarea>
+        <textarea id="aiText" placeholder="Optional: paste invoice text, e.g. '6 x 2019 Château Gaudin Pauillac 75cl  @ 24.90'"></textarea>
         <div class="row">
           <input type="text" id="aiBarcode" placeholder="Barcode" inputmode="numeric" value="${esc(w.barcode ?? "")}">
           <button type="button" class="btn primary" id="aiGo">Look up</button>
@@ -429,8 +451,8 @@ async function openWine(id, preset = {}, keepScroll = 0, opts = {}) {
           <label>Bottle size<select name="size_cl">${SIZES.map(([v, l]) => `<option value="${v}" ${Number(size) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
           ${field("region", "Region (broad → narrow)", w, "text", "wide", "dl-region")}
           ${grapeChips(w.grapes)}
-          ${field("purchase_price", "Paid (DKK/bottle)", w, "number")}
-          ${field("list_price", "Value (DKK, normal price)", w, "number")}
+          ${field("purchase_price", `Paid (${CFG.currency}/bottle)`, w, "number")}
+          ${field("list_price", `Value (${CFG.currency}, normal price)`, w, "number")}
           ${field("shop", "Shop", w, "text", "", "dl-shop")}
           ${field("location", "Location", w)}
           <label class="wide">Barcode<span class="inline"><input type="text" name="barcode" value="${esc(w.barcode ?? "")}" inputmode="numeric"><button type="button" class="btn" id="genBc" title="Generate your own EAN-13 code">New code</button></span></label>
@@ -1125,15 +1147,17 @@ async function doImport(dry) {
   } catch (e) { $("#impResult").innerHTML = `<p class="err">Error: ${esc(e.message)}</p>`; }
 }
 // ------------------------------------------------------------- recommendations (offers that fill the peak gaps)
-let recsTimer = null, recsOffers = [];
+let recsTimer = null, recsOffers = [], recsCur = "";
+const km = (n) => moneyIn(n, recsCur || CFG.currency);   // offer prices are in the currency of that search
 async function renderRecs() {
   const el = $("#tab-recs");
   let r;
   try { r = await api("api/ai/recs"); } catch (e) { el.innerHTML = `<div class="panel wide"><p class="err">${esc(e.message)}</p></div>`; return; }
   const an = r.analysis, st = r.state || {}, last = r.last, run = st.status === "running";
+  recsCur = last?.currency || CFG.currency;
   recsOffers = (last?.offers || []).filter((o) => (!o.checked || o.link_ok) && o.vintage);
-  const MAXP = 200, MINS = 30;   // the owner's criteria (same as the server's MAX_PRICE / MIN_SAVING)
-  const meetsC = (o) => o.meets ?? ((o.price_dkk ?? 1e9) <= MAXP && Math.max(o.discount_pct || 0, o.real_pct || 0) >= MINS);
+  const MAXP = CFG.offer_max_price, MINS = CFG.offer_min_saving;   // the criteria from the app options
+  const meetsC = (o) => o.meets ?? ((o.price ?? 1e9) <= MAXP && Math.max(o.discount_pct || 0, o.real_pct || 0) >= MINS);
   const good = [], rest = [];
   recsOffers.forEach((o, i) => (meetsC(o) ? good : rest).push({ o, i }));
   const dropped = [...(last?.dropped || []), ...(last?.offers || []).filter((o) => o.checked && !o.link_ok)];   // only offers with a confirmed shop page
@@ -1157,8 +1181,8 @@ async function renderRecs() {
       ${last?.errors?.length ? `<details class="small" data-k="err"><summary class="muted">Errors</summary><ul>${last.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></details>` : ""}
     </div>
     ${last ? (recsOffers.length ? `${good.length ? `<div class="offers">${good.map(({ o, i }) => offerCard(o, i)).join("")}</div>`
-        : `<div class="panel wide"><p class="muted">No offer met your criteria (at most ${MAXP} DKK per bottle and at least ${MINS}% below the price of one bottle or the original price).</p></div>`}
-      ${rest.length ? `<details class="panel fold" data-k="rest"><summary><h2>Other offers</h2><span class="small muted">${rest.length} above ${MAXP} DKK or under ${MINS}% off</span></summary>
+        : `<div class="panel wide"><p class="muted">No offer met your criteria (at most ${kr(MAXP)} per bottle and at least ${MINS}% below the price of one bottle or the original price).</p></div>`}
+      ${rest.length ? `<details class="panel fold" data-k="rest"><summary><h2>Other offers</h2><span class="small muted">${rest.length} above ${kr(MAXP)} or under ${MINS}% off</span></summary>
         <div class="offers">${rest.map(({ o, i }) => offerCard(o, i)).join("")}</div></details>` : ""}`
       : last.errors?.length && last.errors.every((e) => /429|quota/i.test(e)) ? "" : `<div class="panel wide"><p class="muted">${dropped.length ? "No offers with a confirmed product page in the last search." : "No offers were found in the last search."}</p></div>`) : ""}
     <div class="sgrid recs-top">
@@ -1231,10 +1255,10 @@ function dealChip(o) {
 function droppedRow(o) {
   if (typeof o === "string") return `<li>${esc(o)}</li>`;   // from before 1.24.1
   const name = `${o.wine}${o.vintage && !String(o.wine).includes(o.vintage) ? " " + o.vintage : ""}`;
-  const q = encodeURIComponent(`${o.producer && !fold(o.wine).includes(fold(o.producer)) ? o.producer + " " : ""}${name} ${o.shop || ""} pris`);
-  const price = [o.price_dkk ? `<b>${kr(o.price_dkk)}</b> per bottle${o.offer_qty > 1 ? `, buying ${o.offer_qty}` : ""}` : "",
-    o.normal_price_dkk ? `<s>${kr(o.normal_price_dkk)}</s> ${esc(BEFORE[o.before_basis] || "before")}` : "",
-    o.market_price_dkk ? `other shops ${kr(o.market_price_dkk)}${o.market_shop ? ` (${esc(o.market_shop)})` : ""}` : ""].filter(Boolean).join(" · ");
+  const q = encodeURIComponent(`${o.producer && !fold(o.wine).includes(fold(o.producer)) ? o.producer + " " : ""}${name} ${o.shop || ""} price`);
+  const price = [o.price ? `<b>${km(o.price)}</b> per bottle${o.offer_qty > 1 ? `, buying ${o.offer_qty}` : ""}` : "",
+    o.normal_price ? `<s>${km(o.normal_price)}</s> ${esc(BEFORE[o.before_basis] || "before")}` : "",
+    o.market_price ? `other shops ${km(o.market_price)}${o.market_shop ? ` (${esc(o.market_shop)})` : ""}` : ""].filter(Boolean).join(" · ");
   return `<li><div><b>${esc(name)}</b> <span class="muted">· ${esc(o.shop || "")}</span></div>
     ${price ? `<div>${price}</div>` : ""}
     <div><a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">Search on Google ↗</a>${o.agent_url ? ` · <a href="${esc(o.agent_url)}" target="_blank" rel="noopener" class="muted">link the agent gave</a>` : ""}</div></li>`;
@@ -1245,16 +1269,16 @@ function offerCard(o, i) {
   return `<div class="panel offer ${o.checked && !o.link_ok ? "unconfirmed" : ""}">
     <div class="ohead"><div><div class="wname">${esc(o.wine)}${o.vintage && !String(o.wine).includes(o.vintage) ? " " + o.vintage : ""}</div>
       <div class="sub">${esc([o.producer, o.region, o.country].filter(Boolean).join(" · "))}</div></div>
-      <div class="oprice"><b>${kr(o.price_dkk)}</b><span class="per">per bottle${o.offer_qty > 1 ? `, buying ${o.offer_qty}` : ""}</span>
-        ${o.normal_price_dkk ? `<span class="before"><s>${kr(o.normal_price_dkk)}</s> ${esc(BEFORE[o.before_basis] || "before")}</span>` : ""}
+      <div class="oprice"><b>${km(o.price)}</b><span class="per">per bottle${o.offer_qty > 1 ? `, buying ${o.offer_qty}` : ""}</span>
+        ${o.normal_price ? `<span class="before"><s>${km(o.normal_price)}</s> ${esc(BEFORE[o.before_basis] || "before")}</span>` : ""}
         ${o.discount_pct ? `<span class="disc ${o.verdict === "normal" || o.verdict === "dear" ? "fake" : ""}" title="The shop's own discount">−${o.discount_pct}%</span>` : ""}</div></div>
     <div class="otags">${dealChip(o)}${peak ? `<span class="chip s-peak">Peak ${peak}</span>` : ""}${o.fit ? '<span class="chip s-ready">Fills a gap</span>' : ""}
       ${m.same.some((w) => w.stock > 0) ? '<span class="chip s-now">In cellar</span>' : m.other.length ? '<span class="chip s-young">Other vintage in cellar</span>' : ""}${o.style ? `<span class="tag">${esc(o.style)}</span>` : ""}</div>
     ${ownedNote(m)}
     <ul class="rich opts">
       ${points(o.why).map((x) => `<li>${esc(x)}</li>`).join("")}
-      ${!o.verdict ? "" : `<li class="${o.verdict === "good" ? "linkok" : o.verdict === "dear" ? "warn" : ""}"><b>Other shops:</b> ${o.market_price_dkk
-        ? `${kr(o.market_price_dkk)}${o.market_shop ? ` (${esc(o.market_shop)})` : ""}, ${o.real_pct > 0 ? `${o.real_pct}% cheaper here` : o.real_pct < 0 ? `${-o.real_pct}% dearer here` : "same price"}`
+      ${!o.verdict ? "" : `<li class="${o.verdict === "good" ? "linkok" : o.verdict === "dear" ? "warn" : ""}"><b>Other shops:</b> ${o.market_price
+        ? `${km(o.market_price)}${o.market_shop ? ` (${esc(o.market_shop)})` : ""}, ${o.real_pct > 0 ? `${o.real_pct}% cheaper here` : o.real_pct < 0 ? `${-o.real_pct}% dearer here` : "same price"}`
         : "no price found, so the discount is the shop's own claim"}</li>`}
       ${o.drink_from_year ? `<li><b>Drink:</b> ${o.drink_from_year}–${o.drink_to_year}${peak ? `, peak ${peak}` : ""}</li>` : ""}
       ${points(o.window_source).map((x, j) => `<li>${j ? "" : "<b>Window from:</b> "}${esc(x)}</li>`).join("")}
@@ -1278,7 +1302,7 @@ $("#tab-recs").addEventListener("click", async (e) => {
       const age = (yr) => (yr && v ? yr - v : "");
       openWine(null, { description: `${o.wine}${v && !String(o.wine).includes(v) ? " " + v : ""}`, producer: o.producer, vintage: v || "",
         country: o.country, region: o.region, grapes: o.grapes, wine_type: o.wine_type || "red", shop: o.shop, link: o.url,
-        purchase_price: o.price_dkk, list_price: o.market_price_dkk || o.normal_price_dkk || o.price_dkk,
+        purchase_price: o.price, list_price: o.market_price || o.normal_price || o.price,
         drink_from_age: age(o.drink_from_year), drink_to_age: age(o.drink_to_year), peak_from_age: age(o.peak_from_year), peak_to_age: age(o.peak_to_year),
         window_basis: o.window_source || "" });
     }
@@ -1457,7 +1481,7 @@ const _close = closeDrawer;
 closeDrawer = function () { _close(); checkVersion(); };
 
 updateReviewCount();
-refresh().then(() => { showTab(load("tab", "list")); initHistory(); }).catch((e) => toast("Could not load data: " + e.message));
+loadSettings().then(refresh).then(() => { showTab(load("tab", "list")); initHistory(); }).catch((e) => toast("Could not load data: " + e.message));
 
 // Direct access (own port with login): show who is logged in and a log-out button
 api("api/session").then((s) => {

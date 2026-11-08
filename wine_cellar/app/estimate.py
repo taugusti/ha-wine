@@ -5,6 +5,7 @@ Rules are matched against region and description. The most specific rule
 """
 import re
 import unicodedata
+import settings
 
 
 def norm(s):
@@ -120,10 +121,11 @@ def estimate(wine):
     except (TypeError, ValueError):
         price = None
     if price and wtype not in TYPE_RULES and not magnum:
-        if price >= 600:
+        st = settings.get()
+        if price >= st["value_high"]:
             t += 4
-            notes.append("value >= 600 DKK +4 years")
-        elif price >= 300:
+            notes.append(f"value >= {settings.money(st['value_high'], st)} +4 years")
+        elif price >= st["value_mid"]:
             t += 2
-            notes.append("value >= 300 DKK +2 years")
+            notes.append(f"value >= {settings.money(st['value_mid'], st)} +2 years")
     return {"from": f, "to": t, "advice": advice, "rationale": "Estimated from " + ", ".join(notes) + "."}

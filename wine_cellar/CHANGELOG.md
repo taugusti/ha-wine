@@ -1,3 +1,15 @@
+# 1.33.0
+- Nothing about one country or currency is built in any more; everything is set in the app configuration (with English descriptions for each option):
+  - **Currency** (`currency`) and **number format** (`number_locale`). Empty = Home Assistant's own currency and the browser's format.
+  - **Shop search area** (`search_area`): a country, region or wider area in plain words ("Denmark", "Bavaria, Germany", "Scandinavia", "the EU"), used for price lookups and Offers. Empty = Home Assistant's country. `search_fallback_area` says where to look when no shop in the area has the wine, and `shops` names shops to look at first.
+  - **Offer criteria**: `offer_max_price`, `offer_min_saving` (%), `offer_small_saving` (%). Applied again when you open Offers, so a change takes effect without a new search.
+  - **Value levels** for the rule-based drinking window (`value_mid` = +2 years, `value_high` = +4 years) and the filter's quick price ranges.
+  - **Own barcode prefix** (`own_barcode_prefix`), **AI language** (`ai_language`) and the Excel **sheet names** (`import_wine_sheet`, `import_stock_sheet`).
+- Price and value amounts default per currency (e.g. 27 EUR / 200 DKK per bottle for offers) when left at 0.
+- Excel import reads English sheet and column names (*Wines*, *Stock*, Description, Vintage, List price …) as well as the legacy Danish ones.
+- Offer prices are stored without a currency in the field names; earlier searches are still shown (in DKK).
+- The remaining Danish words in the UI and AI prompts are now English.
+
 # 1.32.1
 - The stock box (In / Out) is always at the top of a wine, above the description.
 

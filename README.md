@@ -2,7 +2,9 @@
 
 A Home Assistant app (add-on) with a wine database: stock, search, sorting by drinking window,
 AI-assisted registration from invoice text and barcodes, consistent
-values, critic scores, auto-estimated drinking windows, statistics and import from the legacy Excel wine database.
+values, critic scores, auto-estimated drinking windows, statistics and import from an Excel workbook.
+Currency, shop search area, offer criteria and barcode series are set in the app configuration, so it works
+for any country.
 
 ## Installation
 
