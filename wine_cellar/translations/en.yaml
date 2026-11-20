@@ -8,6 +8,12 @@ configuration:
   allowed_users:
     name: Users with direct access
     description: Home Assistant user names that may log in on the direct HTTPS port.
+  api_apps:
+    name: Apps with API access
+    description: Slugs of other Home Assistant apps that may call the Wine Cellar API directly, e.g. the Home Assistant MCP Server (see the documentation). Empty = none.
+  api_apps_write:
+    name: API apps may change data
+    description: Let the apps above add stock movements and edit wines. Off = read only.
   certfile:
     name: Certificate file
     description: Certificate in /ssl for the direct port. Empty = the app's own local certificate authority.

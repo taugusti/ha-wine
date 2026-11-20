@@ -1,3 +1,7 @@
+# 1.34.0
+- **API for other apps**: other Home Assistant apps named under `api_apps` (e.g. the Home Assistant MCP Server) can call the Wine Cellar API directly over the internal network, so an AI assistant can look up the cellar without a browser. Read only unless `api_apps_write` is on. See *API for other apps* in the documentation.
+- New `GET /api/search?q=…` for compact searches: every word must match (case and accents ignored), wines in stock first, with stock, drinking window, peak and status.
+
 # 1.33.0
 - Nothing about one country or currency is built in any more; everything is set in the app configuration (with English descriptions for each option):
   - **Currency** (`currency`) and **number format** (`number_locale`). Empty = Home Assistant's own currency and the browser's format.

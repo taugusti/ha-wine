@@ -31,6 +31,7 @@ import proposals
 import bulk
 import recommend
 import settings
+import apiclients
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 def _version():
@@ -189,6 +190,35 @@ def stats():
             "by_vintage": by_vintage, "by_country": by_country, "flow": flow, "year": y}
 
 
+SEARCH_FIELDS = ("description", "producer", "region", "country", "grapes", "vintage", "barcode", "location", "shop")
+SEARCH_OUT = ("id", "description", "producer", "vintage", "wine_type", "country", "region", "grapes", "size_cl",
+              "stock", "location", "barcode", "drink_year_from", "drink_year_to", "peak_year_from", "peak_year_to",
+              "window_source", "purchase_price", "list_price", "shop", "archived", "last_move")
+
+
+def search(q, in_stock=False, limit=25):
+    """Compact search for other apps: every word must occur (case and accents ignored) in name, producer,
+    region, country, grapes, vintage, barcode, location or shop. Wines in stock come first."""
+    words = [vocab.key(t) for t in str(q or "").split()]
+    words = [w for w in words if w]
+    y = date.today().year
+    hits = []
+    for w in all_wines():
+        if in_stock and not w["stock"]:
+            continue
+        hay = "|".join(vocab.key(w.get(f)) for f in SEARCH_FIELDS)
+        if all(t in hay for t in words):
+            hits.append(w)
+    hits.sort(key=lambda w: (w["stock"] <= 0, -w["stock"], (w["description"] or "").lower()))
+    out = []
+    for w in hits[:max(1, min(int(limit), 200))]:
+        r = {k: w.get(k) for k in SEARCH_OUT}
+        r["status"] = wine_status(w, y)
+        out.append(r)
+    return {"query": q, "matches": len(hits), "bottles": sum(w["stock"] for w in hits if w["stock"] > 0),
+            "wines": out}
+
+
 # ---------------------------------------------------------------- Home Assistant sensors
 _ha_dirty = threading.Event()
 
@@ -278,6 +308,7 @@ def start_lookup(d):
 class H(BaseHTTPRequestHandler):
     server_version = "WineCellar/1.6"
     user = None  # logged-in user on the direct port
+    api_app = None  # another Home Assistant app calling the API (see apiclients.py)
     plain_on_tls = False  # a plain http request on the https port: answered with a redirect
 
     def setup(self):
@@ -331,7 +362,15 @@ class H(BaseHTTPRequestHandler):
                 if not self.gate(method, path):
                     return
             elif self.client_address[0] not in INGRESS_ADDRS:
-                return self.send(403, {"error": "Open Wine Cellar from Home Assistant."})
+                app, may_write = apiclients.access(self.client_address[0])
+                if not app:
+                    return self.send(403, {"error": "Open Wine Cellar from Home Assistant."})
+                if not path.startswith("/api/"):
+                    return self.send(403, {"error": "Apps may only use /api/ paths."})
+                if method != "GET" and not may_write:
+                    return self.send(403, {"error": "Read only: turn on api_apps_write in the Wine Cellar "
+                                                    "configuration to let other apps change data."})
+                self.api_app = app
             if path.startswith("/api/ai/"):
                 # slow calls to Home Assistant: use a separate connection and do not block other requests
                 return self.dispatch_ai(method, path)
@@ -546,6 +585,8 @@ class H(BaseHTTPRequestHandler):
             changed()
             return self.send(200, {"ok": True})
 
+        if path == "/api/search" and method == "GET":
+            return self.send(200, search(q.get("q"), q.get("in_stock") in ("1", "true"), q.get("limit") or 25))
         if path == "/api/lookup":
             bc = (q.get("barcode") or "").strip()
             rows = [dict(id=r["id"], description=r["description"]) for r in
@@ -591,7 +632,8 @@ class H(BaseHTTPRequestHandler):
             changed()
             return self.send(200, {"ok": True})
         if path == "/api/session":
-            return self.send(200, {"direct": bool(getattr(self.server, "direct", False)), "user": self.user})
+            return self.send(200, {"direct": bool(getattr(self.server, "direct", False)), "user": self.user,
+                                   "app": self.api_app})
         if path == "/api/settings":
             return self.send(200, settings.get())
         if path == "/api/version":
@@ -656,6 +698,9 @@ def main():
           flush=True)
     users = sorted(auth.allowed_users())
     print("Direct access users: " + (", ".join(users) if users else "none (direct access is off)"), flush=True)
+    apps, write = apiclients.configured()
+    print("API for other apps: " + (", ".join(apps) + (" (read and write)" if write else " (read only)") if apps
+                                    else "none"), flush=True)
     direct = DirectServer(("0.0.0.0", DIRECT_PORT), H)
     try:
         direct.ssl_ctx, direct.own_ca = tls.context()

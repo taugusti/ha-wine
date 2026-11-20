@@ -170,6 +170,8 @@ The app keeps these sensors updated:
   Empty means an agent whose entity ID contains "search"; `none` turns the web search step off.
 - `allowed_users` (optional): Home Assistant usernames (the login name, not the display name) that may use
   direct access, see below. Empty means direct access is off.
+- `api_apps` / `api_apps_write` (optional): other Home Assistant apps that may call the API directly, see
+  [API for other apps](#api-for-other-apps).
 - `extra_hostnames` (optional): more names or IP addresses for the direct-access certificate.
 - `certfile` / `keyfile` (optional): your own certificate in Home Assistant's `/ssl` folder for direct access.
 
@@ -232,6 +234,33 @@ With the padlock showing, use the install button in the address bar (or ⋮ → 
 **Install page as app**). Wine Cellar then opens in its own window from the Start menu, taskbar or desktop.
 
 Direct access works on your local network only, not through Nabu Casa.
+
+## API for other apps
+
+Other Home Assistant apps can use the Wine Cellar API directly over the internal Home Assistant network, for example
+the **Home Assistant MCP Server** (ha-mcp), so an AI assistant can look up and update the cellar without a browser.
+
+1. Find the other app's slug: Settings → Apps → the app; the slug is the last part of the address
+   (e.g. `81f33d0f_ha_mcp`).
+2. Add it under `api_apps` in the Wine Cellar configuration. Turn on `api_apps_write` if the app may also add stock
+   movements and edit wines; otherwise it can only read.
+3. Restart Wine Cellar.
+
+The app is recognised by its address on the internal network, so nothing else on your network gets in. Apps get
+the `/api/...` paths only, not the web interface. The app log shows `API: app … connected` the first time an app
+calls.
+
+Useful calls (paths relative to the app; with ha-mcp: `ha_manage_app(slug="<wine cellar slug>", path=...)`):
+
+| Call | What it does |
+|------|--------------|
+| `GET /api/search?q=magrez songes&in_stock=1&limit=25` | Search: every word must occur in name, producer, region, country, grapes, vintage, barcode, location or shop (case and accents ignored). Wines in stock first; compact fields incl. `stock`, drinking window, peak and `status` (over, now, peak, ready, young, unknown). `in_stock` and `limit` are optional. |
+| `GET /api/wines/<id>` | One wine with all fields and its stock movements. |
+| `GET /api/wines` | All wines with all fields (large). |
+| `GET /api/stats` | Bottles, value, and bottles per status, vintage, country and peak year. |
+| `GET /api/lookup?barcode=<code>` | Wines with this barcode. |
+| `POST /api/movements` `{"wine_id": 1, "kind": "out", "qty": 1}` | Stock movement (needs `api_apps_write`): `kind` is `in`, `out` or `count` (with `"count": n`); optional `date` (YYYY-MM-DD) and `note`. |
+| `PUT /api/wines/<id>` `{...fields}` | Change a wine (needs `api_apps_write`). |
 
 ## Data and backup
 
