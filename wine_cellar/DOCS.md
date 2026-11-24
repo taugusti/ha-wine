@@ -162,8 +162,12 @@ The app keeps these sensors updated:
 - `sensor.wine_cellar_ready`: bottles within their drinking window
 - `sensor.wine_cellar_at_peak`: bottles in their peak period this year
 - `sensor.claude_cost_month` (only with `claude_admin_key`): this month's Claude API cost in USD for your whole
-  Anthropic organization, with today's cost as the attribute `today`. Updated every 15 minutes from Anthropic's
-  cost report; month and day follow UTC. If Anthropic refuses the key, the attribute `error` says why.
+  Anthropic organization, with today's cost (`today`) and the cost per workspace (`workspaces`) as attributes.
+  Updated every 15 minutes from Anthropic's cost report; month and day follow UTC. If Anthropic refuses the key,
+  the attribute `error` says why.
+- `sensor.claude_cost_<workspace>`: the same per Anthropic workspace that has cost this month, e.g.
+  `sensor.claude_cost_wine_cellar`. To see features apart, give each its own API key in its own workspace and add
+  each key as its own Anthropic integration entry in Home Assistant (each gets its own AI Task entity).
 
 ## Configuration
 

@@ -1,3 +1,6 @@
+# 1.36.0
+- Claude cost per Anthropic workspace: besides the total, the app now makes `sensor.claude_cost_<workspace>` for each workspace with cost this month (e.g. `sensor.claude_cost_wine_cellar`), named after the workspace. The total sensor lists all workspaces in the attribute `workspaces`.
+
 # 1.35.0
 - **Claude cost sensor**: set `claude_admin_key` (an Anthropic Admin API key) and the app keeps `sensor.claude_cost_month` up to date: this month's Claude API cost in USD for the whole Anthropic organization (Wine Cellar and every other Home Assistant feature using Claude), with today's cost as an attribute. Updated every 15 minutes.
 
