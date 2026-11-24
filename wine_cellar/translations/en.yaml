@@ -65,5 +65,8 @@ configuration:
   import_stock_sheet:
     name: Import — stock sheet
     description: Name of the sheet with stock movements. Empty = "Stock", "Movements" or "Lager".
+  claude_admin_key:
+    name: Claude cost — Anthropic Admin API key
+    description: Optional. An Admin API key (sk-ant-admin01-...) for your Claude Console organization. When set, the app keeps sensor.claude_cost_month up to date with this month's Claude API cost in USD for the whole organization (all API keys, so also other Home Assistant features). Empty = no sensor.
 network:
   8100/tcp: Direct access over HTTPS with login (for users who should only see Wine Cellar)

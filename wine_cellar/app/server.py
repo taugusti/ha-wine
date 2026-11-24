@@ -32,6 +32,7 @@ import bulk
 import recommend
 import settings
 import apiclients
+import claudecost
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 def _version():
@@ -694,10 +695,13 @@ def main():
     db.migrate_placeholders(db.con())
     threading.Thread(target=ha_push_loop, daemon=True).start()
     changed()
+    threading.Thread(target=claudecost.loop, daemon=True).start()
     print(f"Wine Cellar running on port {PORT} (ingress) and {DIRECT_PORT} (direct, login), database: {db.DB_PATH}",
           flush=True)
     users = sorted(auth.allowed_users())
     print("Direct access users: " + (", ".join(users) if users else "none (direct access is off)"), flush=True)
+    print("Claude cost sensor: " + ("on (" + claudecost.ENTITY + ")" if claudecost._key() else "off (no claude_admin_key)"),
+          flush=True)
     apps, write = apiclients.configured()
     print("API for other apps: " + (", ".join(apps) + (" (read and write)" if write else " (read only)") if apps
                                     else "none"), flush=True)

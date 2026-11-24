@@ -161,6 +161,9 @@ The app keeps these sensors updated:
 - `sensor.wine_cellar_drink_this_year`: bottles whose last drinking year is this year or earlier
 - `sensor.wine_cellar_ready`: bottles within their drinking window
 - `sensor.wine_cellar_at_peak`: bottles in their peak period this year
+- `sensor.claude_cost_month` (only with `claude_admin_key`): this month's Claude API cost in USD for your whole
+  Anthropic organization, with today's cost as the attribute `today`. Updated every 15 minutes from Anthropic's
+  cost report; month and day follow UTC. If Anthropic refuses the key, the attribute `error` says why.
 
 ## Configuration
 
@@ -174,6 +177,9 @@ The app keeps these sensors updated:
   [API for other apps](#api-for-other-apps).
 - `extra_hostnames` (optional): more names or IP addresses for the direct-access certificate.
 - `certfile` / `keyfile` (optional): your own certificate in Home Assistant's `/ssl` folder for direct access.
+- `claude_admin_key` (optional): an Anthropic Admin API key (`sk-ant-admin01-...`), created by an organization
+  admin in the Claude Console under Settings → Admin keys. Turns on `sensor.claude_cost_month`. Individual
+  Console accounts have no Admin API; create an organization first.
 
 Market and money (all optional; empty or 0 means the fallback in brackets):
 

@@ -1,3 +1,6 @@
+# 1.35.0
+- **Claude cost sensor**: set `claude_admin_key` (an Anthropic Admin API key) and the app keeps `sensor.claude_cost_month` up to date: this month's Claude API cost in USD for the whole Anthropic organization (Wine Cellar and every other Home Assistant feature using Claude), with today's cost as an attribute. Updated every 15 minutes.
+
 # 1.34.0
 - **API for other apps**: other Home Assistant apps named under `api_apps` (e.g. the Home Assistant MCP Server) can call the Wine Cellar API directly over the internal network, so an AI assistant can look up the cellar without a browser. Read only unless `api_apps_write` is on. See *API for other apps* in the documentation.
 - New `GET /api/search?q=…` for compact searches: every word must match (case and accents ignored), wines in stock first, with stock, drinking window, peak and status.
