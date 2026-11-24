@@ -117,6 +117,7 @@ function priceQuick() {
 async function refresh() {
   wines = await api("api/wines");
   render();
+  if (curTab() === "hist") loadHist();   // a stock change in an open wine shows up in History at once
 }
 
 // filters (1.20): kept in one object, edited in the filter sheet, shown as removable chips under the search field
@@ -1070,11 +1071,94 @@ function showTab(name) {
       <p class="small muted">App version ${esc(LOADED_VERSION || "?")}. If the app was just updated, reload the page.</p>
       <div class="row"><button class="btn primary" onclick="location.reload()">Reload</button></div></div>`;
   });
+  if (name === "hist") show(renderHist, "#tab-hist");
   if (name === "stats") show(renderStats, "#tab-stats");
   if (name === "data") { renderMeta(); renderCleanup(); }
   if (name === "review") show(renderReview, "#tab-review");
   if (name === "recs") show(renderRecs, "#tab-recs");
 }
+
+// ------------------------------------------------------------- history (1.37): every check-in, check-out and count
+const H0 = { q: "", kind: "", source: "", from: "", to: "" };
+let hf = { ...H0, ...load("hist", {}) };
+let histItems = [], histTotal = 0;
+const HIST_PAGE = 200;
+const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const HPERIOD = {
+  "30d": () => { const d = new Date(); d.setDate(d.getDate() - 30); return [isoDay(d), ""]; },
+  year: () => [`${Y}-01-01`, ""],
+  lastyear: () => [`${Y - 1}-01-01`, `${Y - 1}-12-31`],
+  all: () => ["", ""],
+};
+function dayLabel(iso) {
+  const d = new Date(iso + "T12:00:00");
+  return isNaN(d) ? iso : d.toLocaleDateString(LOC(), { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+}
+function histQuery(offset = 0) {
+  const p = new URLSearchParams({ limit: HIST_PAGE, offset });
+  Object.entries(hf).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return "api/movements?" + p;
+}
+async function renderHist() {
+  const seg = (k, opts) => `<div class="seg" data-hk="${k}">${opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${hf[k] === v ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  $("#tab-hist").innerHTML = `
+    <div class="panel wide hist">
+      <h2>History</h2>
+      <p class="muted small">Every bottle checked in or out and every stock count, newest first. Click a line to open the wine.</p>
+      <div class="row"><input type="search" id="hq" placeholder="Search wine, producer, vintage or barcode" value="${esc(hf.q)}" style="flex:1;min-width:200px"></div>
+      <div class="row">${seg("kind", [["", "All"], ["in", "In"], ["out", "Out"], ["count", "Counts"]])}
+        ${seg("source", [["", "All sources"], ["app", "App"], ["excel", "Excel"]])}</div>
+      <div class="row">
+        <label class="small">From <input type="date" id="hfrom" value="${esc(hf.from)}"></label>
+        <label class="small">To <input type="date" id="hto" value="${esc(hf.to)}"></label>
+        <div class="fquick">${[["30d", "Last 30 days"], ["year", String(Y)], ["lastyear", String(Y - 1)], ["all", "All time"]].map(([k, l]) => `<button type="button" data-hp="${k}">${l}</button>`).join(" ")}</div>
+      </div>
+      <p id="hsum" class="small"></p>
+      <ul class="moves hlist" id="hlist"></ul>
+      <div class="row"><button type="button" class="btn" id="hmore" hidden>Show more</button></div>
+    </div>`;
+  await loadHist();
+}
+async function loadHist(more = false) {
+  const r = await api(histQuery(more ? histItems.length : 0));
+  histItems = more ? histItems.concat(r.items) : r.items;
+  histTotal = r.total;
+  const sum = $("#hsum"); if (!sum) return;
+  sum.innerHTML = histTotal
+    ? `${histTotal} movement${histTotal === 1 ? "" : "s"} · <b>+${r.in}</b> in · <b>−${r.out}</b> out` + (histItems.length < histTotal ? ` <span class="muted">(showing ${histItems.length})</span>` : "")
+    : '<span class="muted">No movements match.</span>';
+  let lastDay = "";
+  $("#hlist").innerHTML = histItems.map((m) => {
+    const head = m.date !== lastDay ? `<li class="hday">${esc(dayLabel(m.date))}</li>` : "";
+    lastDay = m.date;
+    const time = m.source === "app" && (m.created_at || "").slice(0, 10) === m.date ? (m.created_at.match(/T(\d\d:\d\d)/) || [])[1] : "";
+    const name = m.wine_id ? `${esc(m.description || "?")} <span class="muted">${esc(m.vintage || "NV")}${m.size_cl && m.size_cl !== 75 ? ` · ${m.size_cl} cl` : ""}</span>`
+      : `<span class="muted">Unknown wine · barcode ${esc(m.barcode || "?")}</span>`;
+    return `${head}<li class="${m.wine_id ? "hrow" : ""}" ${m.wine_id ? `data-openw="${m.wine_id}"` : ""}>
+      <span class="muted">${time || ""}</span>
+      <span class="q ${m.qty > 0 ? "pos" : m.qty < 0 ? "neg" : ""}">${m.qty > 0 ? "+" : ""}${m.qty}</span>
+      <span>${name}<br><span class="small muted">${KIND[m.kind] || m.kind}${m.kind === "count" ? ` (${m.count_value} bottles)` : ""}${m.note ? " · " + esc(m.note) : ""}${m.source === "excel" ? '<span class="tag">Excel</span>' : ""}</span></span>
+      <span></span></li>`;
+  }).join("");
+  $("#hmore").hidden = histItems.length >= histTotal;
+}
+const histChanged = () => { save("hist", hf); loadHist().catch((e) => toast(e.message)); };
+$("#tab-hist").addEventListener("input", (e) => {
+  if (e.target.id === "hq") { hf.q = e.target.value; clearTimeout(histChanged.t); histChanged.t = setTimeout(histChanged, 250); }
+});
+$("#tab-hist").addEventListener("change", (e) => {
+  if (e.target.id === "hfrom") { hf.from = e.target.value; histChanged(); }
+  if (e.target.id === "hto") { hf.to = e.target.value; histChanged(); }
+});
+$("#tab-hist").addEventListener("click", (e) => {
+  const row = e.target.closest("[data-openw]");
+  if (row) { openWine(row.dataset.openw); return; }
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.id === "hmore") { loadHist(true).catch((err) => toast(err.message)); return; }
+  const sg = b.closest(".seg[data-hk]");
+  if (sg) { hf[sg.dataset.hk] = b.dataset.v; $$("button", sg).forEach((x) => x.classList.toggle("on", x === b)); histChanged(); return; }
+  if (b.dataset.hp) { [hf.from, hf.to] = HPERIOD[b.dataset.hp](); $("#hfrom").value = hf.from; $("#hto").value = hf.to; histChanged(); }
+});
 
 // ------------------------------------------------------------- statistics
 function bars(obj, opts = {}) {

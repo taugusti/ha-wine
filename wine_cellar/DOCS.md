@@ -153,6 +153,10 @@ When you save a barcode that another wine already has (suppliers sometimes use t
 the app asks first. **Make my own code** gives the wine the next code in your own series; the code
 is shown under Barcode in the wine overview, so you can print a label for the bottle with your label app.
 
+## History
+
+The History tab lists every stock movement in the cellar, newest first and grouped by day: bottles checked in and out and stock counts, from the app and from Excel. Movements recorded in the app show the time of day. Search on wine, producer, vintage or barcode, and filter on type, source and period. The line at the top shows how many movements and bottles in and out the selection covers. Click a line to open the wine; a movement is deleted from the wine's own *Movements* list.
+
 ## Home Assistant sensors
 
 The app keeps these sensors updated:
@@ -266,6 +270,7 @@ Useful calls (paths relative to the app; with ha-mcp: `ha_manage_app(slug="<wine
 |------|--------------|
 | `GET /api/search?q=magrez songes&in_stock=1&limit=25` | Search: every word must occur in name, producer, region, country, grapes, vintage, barcode, location or shop (case and accents ignored). Wines in stock first; compact fields incl. `stock`, drinking window, peak and `status` (over, now, peak, ready, young, unknown). `in_stock` and `limit` are optional. |
 | `GET /api/wines/<id>` | One wine with all fields and its stock movements. |
+| `GET /api/movements?q=…&kind=out&from=2026-01-01` | Stock movements for the whole cellar, newest first, with the wine's description and vintage. Filters: `q` (words), `kind` (`in`/`out`/`count`), `source` (`app`/`excel`), `from`/`to` (YYYY-MM-DD); paged with `limit` (default 200) and `offset`. |
 | `GET /api/wines` | All wines with all fields (large). |
 | `GET /api/stats` | Bottles, value, and bottles per status, vintage, country and peak year. |
 | `GET /api/lookup?barcode=<code>` | Wines with this barcode. |

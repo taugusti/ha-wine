@@ -13,6 +13,7 @@ import ssl
 import threading
 import time
 import traceback
+import unicodedata
 import urllib.error
 import urllib.request
 from datetime import date
@@ -189,6 +190,42 @@ def stats():
             "at_peak": at_peak, "past_peak": past_peak, "peak_estimated": estimated,
             "by_peak_year_to": by_peak_to, "peak_by_year": peak_years, "by_status": by_status,
             "by_vintage": by_vintage, "by_country": by_country, "flow": flow, "year": y}
+
+
+def _fold(s):
+    return unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().lower()
+
+
+def movement_log(q):
+    """All stock movements, newest first (History tab, 1.37). Filters: kind, source, from/to (YYYY-MM-DD),
+    q (words matched against wine description, producer, vintage and barcode); paged with limit/offset."""
+    where, args = [], []
+    if q.get("kind") in ("in", "out", "count"):
+        where.append("m.kind=?"); args.append(q["kind"])
+    if q.get("source") in ("app", "excel"):
+        where.append("m.source=?"); args.append(q["source"])
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", q.get("from") or ""):
+        where.append("m.date>=?"); args.append(q["from"])
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", q.get("to") or ""):
+        where.append("m.date<=?"); args.append(q["to"])
+    sql = ("SELECT m.id, m.wine_id, COALESCE(m.barcode, w.barcode) AS barcode, m.date, m.qty, m.kind, m.count_value, m.note, m.source, m.created_at, "
+           "w.description, w.producer, w.vintage, w.size_cl FROM movement m LEFT JOIN wine w ON w.id = m.wine_id"
+           + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY m.date DESC, m.id DESC")
+    rows = [dict(r) for r in db.con().execute(sql, args)]
+    terms = _fold(q.get("q")).split()
+    if terms:
+        def hay(r):
+            return _fold(" ".join(str(r[k] or "") for k in ("description", "producer", "vintage", "barcode")))
+        rows = [r for r in rows if all(t in hay(r) for t in terms)]
+    try:
+        limit = max(1, min(1000, int(q.get("limit") or 200)))
+        offset = max(0, int(q.get("offset") or 0))
+    except ValueError:
+        limit, offset = 200, 0
+    return {"total": len(rows),
+            "in": sum(r["qty"] for r in rows if r["qty"] > 0),
+            "out": -sum(r["qty"] for r in rows if r["qty"] < 0),
+            "items": rows[offset:offset + limit]}
 
 
 SEARCH_FIELDS = ("description", "producer", "region", "country", "grapes", "vintage", "barcode", "location", "shop")
@@ -580,6 +617,8 @@ class H(BaseHTTPRequestHandler):
                       " VALUES (?,?,?,?,?,?,?,'app',?)", (wid, r["barcode"], day, qty, kind, cnt, d.get("note"), now()))
             changed()
             return self.send(201, {"stock": stock_of(wid)})
+        if path == "/api/movements" and method == "GET":
+            return self.send(200, movement_log(q))
         m2 = re.fullmatch(r"/api/movements/(\d+)", path)
         if m2 and method == "DELETE":
             c.execute("DELETE FROM movement WHERE id=?", (m2[1],))

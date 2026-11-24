@@ -1,3 +1,7 @@
+# 1.37.0
+- **History tab**: every check-in, check-out and stock count across the whole cellar, newest first and grouped by day, with the time for movements recorded in the app. Search on wine, producer, vintage or barcode; filter on In / Out / Counts, source (App / Excel) and period (from/to, or quick buttons for the last 30 days, this year, last year, all time). Shows the number of movements and bottles in and out for the selection. Click a line to open the wine. Filters are remembered.
+- New `GET /api/movements` with the same filters (`q`, `kind`, `source`, `from`, `to`, `limit`, `offset`).
+
 # 1.36.0
 - Claude cost per Anthropic workspace: besides the total, the app now makes `sensor.claude_cost_<workspace>` for each workspace with cost this month (e.g. `sensor.claude_cost_wine_cellar`), named after the workspace. The total sensor lists all workspaces in the attribute `workspaces`.
 

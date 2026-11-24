@@ -522,3 +522,12 @@ ul.dropped s { color: var(--muted); }
 .stockc.checkout { border: 2px solid var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
 .cohint { font-size: 14px; margin-bottom: 10px; }
 .stockc.checkout [data-mv=out] { min-width: 90px; font-size: 16px; }
+
+/* History tab (1.37) */
+.hist .moves li { grid-template-columns: 48px 44px 1fr 0; }
+.hist .moves li.hday { display: block; padding: 14px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.hist .moves li.hrow { cursor: pointer; }
+.hist .moves li.hrow:hover { background: var(--surface2); }
+.hist .q.pos { color: var(--ready); }
+.hist .q.neg { color: var(--over); }
+.hist input[type=date] { margin-left: 4px; }
