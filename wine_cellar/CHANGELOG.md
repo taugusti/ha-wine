@@ -1,3 +1,6 @@
+# 1.38.0
+- Filter on barcode: the filter sheet has a new *Barcode* group with *No barcode* and *Has barcode*, e.g. to find the wines that still need a label. Shown as a chip like the other filters and remembered.
+
 # 1.37.0
 - **History tab**: every check-in, check-out and stock count across the whole cellar, newest first and grouped by day, with the time for movements recorded in the app. Search on wine, producer, vintage or barcode; filter on In / Out / Counts, source (App / Excel) and period (from/to, or quick buttons for the last 30 days, this year, last year, all time). Shows the number of movements and bottles in and out for the selection. Click a line to open the wine. Filters are remembered.
 - New `GET /api/movements` with the same filters (`q`, `kind`, `source`, `from`, `to`, `limit`, `offset`).

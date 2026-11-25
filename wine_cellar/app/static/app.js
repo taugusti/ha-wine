@@ -121,7 +121,7 @@ async function refresh() {
 }
 
 // filters (1.20): kept in one object, edited in the filter sheet, shown as removable chips under the search field
-const F0 = { country: "", region: "", grape: "", basis: "value", pmin: "", pmax: "", vmin: "", vmax: "", types: [], status: "", all: false, crit: "", smin: "" };
+const F0 = { country: "", region: "", grape: "", basis: "value", pmin: "", pmax: "", vmin: "", vmax: "", types: [], status: "", all: false, crit: "", smin: "", bc: "" };
 const CRIT_SHORT = { rp: "WA", ws: "WS", js: "JS" };
 // a critic score as a number: "93" → 93, "91-93" → 92 (middle of a barrel score range)
 const scoreNum = (v) => { const n = String(v ?? "").match(/\d{2,3}(?:\.\d)?/g)?.map(Number).filter((x) => x >= 50 && x <= 100) || []; return n.length ? (n[0] + (n[1] ?? n[0])) / 2 : null; };
@@ -138,6 +138,7 @@ function matches(w, f = flt, terms = []) {
   if (f.grape && !fold(w.grapes).includes(fold(f.grape).trim())) return false;
   if (f.types.length && !f.types.includes(w.wine_type || "red")) return false;
   if (f.status && status(w) !== f.status) return false;
+  if (f.bc && !!String(w.barcode ?? "").trim() !== (f.bc === "yes")) return false;
   const lo = num(f.pmin), hi = num(f.pmax);
   if (lo != null || hi != null) {
     const p = priceOf(w);
@@ -174,6 +175,7 @@ function activeFilters() {
   flt.types.forEach((t) => a.push([t[0].toUpperCase() + t.slice(1), () => { flt.types = flt.types.filter((x) => x !== t); }]));
   if (flt.status) a.push([STATUS[flt.status], () => { flt.status = ""; }]);
   if (flt.smin !== "") a.push([Number(flt.smin) <= 1 ? `Has ${flt.crit ? CRIT_SHORT[flt.crit] + " " : "a "}score` : `${flt.crit ? CRIT_SHORT[flt.crit] : "Score"} ${flt.smin}+`, () => { flt.smin = ""; flt.crit = ""; }]);
+  if (flt.bc) a.push([flt.bc === "no" ? "No barcode" : "Has barcode", () => { flt.bc = ""; }]);
   if (flt.all) a.push(["Incl. 0 bottles", () => { flt.all = false; }]);
   return a;
 }
@@ -216,6 +218,7 @@ function fillSheet() {
   $("#fType").innerHTML = types.map((t) => `<button type="button" data-t="${esc(t)}" class="${flt.types.includes(t) ? "on" : ""}">${esc(t)}</button>`).join("");
   $("#fStatus").innerHTML = ["peak", "now", "ready", "young", "over"].map((k) => `<button type="button" data-s="${k}" class="${flt.status === k ? "on" : ""}"><i class="dot s-${k}"></i>${STATUS[k]}</button>`).join("");
   $("#fAll").checked = flt.all;
+  $$("#fBc button").forEach((b) => b.classList.toggle("on", b.dataset.b === flt.bc));
   $$("#fCrit button").forEach((b) => b.classList.toggle("on", b.dataset.c === flt.crit));
   $$("#fSq button").forEach((b) => b.classList.toggle("on", b.dataset.s === String(flt.smin)));
   const n = wines.filter((w) => matches(w)).length;
@@ -246,6 +249,7 @@ $("#fType").addEventListener("click", (e) => {
 $("#fCrit").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ crit: b.dataset.c }); });
 $("#fSq").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ smin: String(flt.smin) === b.dataset.s ? "" : b.dataset.s }); });
 $("#fStatus").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ status: flt.status === b.dataset.s ? "" : b.dataset.s }); });
+$("#fBc").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setFilter({ bc: flt.bc === b.dataset.b ? "" : b.dataset.b }); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && filterOpen()) closeFilter(); });
 
 function cmp(a, b) {
